@@ -1,0 +1,16 @@
+{
+  "name": "gherkin-bdd",
+  "displayName": "Gherkin BDD",
+  "version": "0.1.0",
+  "description": "Gherkin BDD workflow plugin for writing, reviewing, and evolving behavior specs.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "keywords": [
+    "gherkin",
+    "bdd",
+    "cucumber",
+    "specification"
+  ]
+}

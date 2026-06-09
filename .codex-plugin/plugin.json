@@ -1,0 +1,22 @@
+{
+  "name": "gherkin-bdd",
+  "version": "0.1.0",
+  "description": "Gherkin BDD workflow plugin for writing, reviewing, and evolving behavior specs.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Gherkin BDD",
+    "shortDescription": "Write and review Gherkin BDD specs.",
+    "longDescription": "Gherkin BDD provides a reusable workflow for turning product behavior into clear features, scenarios, step definitions, and review notes.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "BDD specification drafting",
+      "Gherkin scenario review",
+      "Step definition planning"
+    ],
+    "defaultPrompt": "Help me write or review Gherkin BDD scenarios for this project."
+  }
+}
