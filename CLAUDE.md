@@ -11,18 +11,15 @@ This is plugin *source*, not an application. There is no build step and no third
 ## Commands
 
 ```bash
-# Run the full test suite (6 tests, all stdlib unittest)
+# Run the full test suite (11 tests, all stdlib unittest)
 python3 -m unittest discover -s tests
 
 # Run a single test
-python3 -m unittest tests.test_install_cli.InstallCliTest.test_appends_bdd_md_to_existing_project_instruction_files
+python3 -m unittest tests.test_install_cli.InstallCliTest.test_claude_install_copies_tree_and_registers_hook
 
-# Inspect what an install would do, without writing anything
-bin/bdd-bootstrap --dry-run
-bin/bdd-bootstrap show-paths
-
-# Install into a project (defaults: source=., project-dir=., both hosts)
-bin/bdd-bootstrap --project-dir /path/to/project
+# Install into the CURRENT directory for one host (cd into the target project first)
+bin/bdd-bootstrap claude
+bin/bdd-bootstrap codex
 ```
 
 Loading this plugin in Claude Code during development:
@@ -43,18 +40,34 @@ After editing any plugin component, run `/reload-plugins` inside the Claude Code
 - **Claude → copy** into `<project>/.claude/skills/gherkin-bdd`. Self-contained, so it can be committed with the target project.
 - **Codex → symlink** into `<project>/.agents/plugins/plugins/gherkin-bdd`, plus a registered entry in `<project>/.agents/plugins/marketplace.json`. Symlinks mean edits to shared source take effect without re-installing.
 
-**`BDD.md` is both rule and payload.** Its content is appended into the target project's `CLAUDE.md` / `AGENTS.md` (case-insensitive name match) idempotently — skipped if the content is already present — and the installer offers to create those files if missing (`--create-missing-instructions ask|yes|no`). The rule itself: every user-facing feature must have a matching `.feature` file (Gherkin), treated as the source of truth for behavior.
+**`BDD.md` is rule and payload, kept in sync by one script.** The rule: every user-facing feature must have a matching `.feature` file (Gherkin), treated as the source of truth for behavior. That rule must live in the host's **canonical instruction file** — `CLAUDE.md` for Claude, `AGENTS.md` for Codex. A single script, `scripts/check_bdd_sync.py`, owns syncing it and runs in two places:
+- **Install time** — `install_claude` / `install_codex` invoke the script as a subprocess (`run_bdd_sync`), feeding it the same JSON payload a SessionStart hook would. Install-time and session-time sync therefore share one implementation; the installer never re-implements the file editing.
+- **Session start** — the installer registers a `SessionStart` hook (Claude → `.claude/settings.json` with `${CLAUDE_PROJECT_DIR}`; Codex → `.codex/hooks.json` with an absolute path + `statusMessage`) that runs the same script on every start/resume. Both hosts share one hook schema (`hooks.SessionStart[].hooks[].command`).
 
-**Session-start sync.** The installer also registers a `SessionStart` hook per host that runs `scripts/check_bdd_sync.py` on every session start/resume. The script locates `BDD.md` relative to its own install dir (`<install>/scripts/..` works for both the Claude copy and the Codex symlink), reads the project root from the hook's stdin `cwd`, and **edits files in place**: it appends `BDD.md` to any `CLAUDE.md`/`AGENTS.md` missing the rule, or creates `CLAUDE.md` when neither exists. The sync is idempotent — once the rule is present nothing is rewritten. Hook entries are merged idempotently: Claude → `.claude/settings.json` (uses `${CLAUDE_PROJECT_DIR}`), Codex → `.codex/hooks.json` (absolute path + `statusMessage`). Both hosts share one hook schema (`hooks.SessionStart[].hooks[].command`). Claude does **not** load hooks from a copied skill dir, so the hook must live in `settings.json`, not the installed skill folder. Behavior is specified in [features/bdd-sync-check.feature](features/bdd-sync-check.feature).
+The script takes `--host {claude|codex}` (baked into both the hook command and the install-time call), locates `BDD.md` relative to its own install dir (works for both the Claude copy and the Codex symlink), and reads the project root from stdin `cwd`. It ensures the host's canonical file carries the rule (creating it if absent), appends the rule to any *other* existing instruction file that lacks it, never creates the other host's file, and is idempotent + non-blocking. Claude does **not** load hooks from a copied skill dir, so the hook must live in `settings.json`. Behavior is specified in [features/bdd-sync-check.feature](features/bdd-sync-check.feature).
 
 **Project-level only.** The CLI never writes to `~/.claude`, `~/.agents`, or any user-level location.
 
 ## Working in the CLI
 
-`bin/bdd-bootstrap` has no `.py` extension and is loaded in tests via `SourceFileLoader`. `main(argv, input_func=input)` takes both the arg list and the interactive-prompt function as parameters so tests can drive it directly — preserve these seams when changing argument parsing or the create-missing-files prompt. Argument handling is slightly unusual: `show-paths` is the only real subcommand; any other invocation is parsed as install flags with `command="run"`.
+`bin/bdd-bootstrap` has no `.py` extension and is loaded in tests via `SourceFileLoader`. It takes one required positional, `host` (`claude` or `codex`) — no flags, no subcommands. The plugin **source** is the script's own repo (`SOURCE = Path(__file__).resolve().parent.parent`) and the install **target** is `Path.cwd()`, so you run it from inside the project you're setting up. Re-running is idempotent: it removes and re-lays the tree, re-merges the hook entry, and the shared sync script no-ops once the rule is present. `main(argv)` returns an int; tests drive it by `chdir`-ing into a temp project.
 
 ## Conventions
 
 - `SKILL.md` frontmatter (`name`, `description`) drives skill discovery; `$ARGUMENTS` in the skill body is the Claude Code slash-command argument hook.
 - Do not place `README.md` (or any plain markdown) directly under `agents/` — Claude Code treats markdown files there as agent definitions.
-- `.claude/skills/gherkin-bdd/` in this repo is a **copy-mode self-install** (the plugin dogfooded into its own project). Because it is a copy, it does not update when you edit `skills/...`; refresh it with `bin/bdd-bootstrap --target claude --force`. Edit the top-level source, not this copy.
+- `.claude/skills/gherkin-bdd/` in this repo is a **copy-mode self-install** (the plugin dogfooded into its own project). Because it is a copy, it does not update when you edit `skills/...`; refresh it by running `bin/bdd-bootstrap claude` again. Edit the top-level source, not this copy.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live in the `chengdagong/gherkin-bdd` GitHub Issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage roles, each mapped to a label of the same name (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.

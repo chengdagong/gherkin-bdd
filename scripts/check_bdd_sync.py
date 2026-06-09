@@ -2,11 +2,14 @@
 """SessionStart hook: keep the BDD rule synced into project instructions.
 
 This script is shared by Claude Code and Codex. Both hosts invoke it as a
-SessionStart hook, passing a JSON payload on stdin (with a ``cwd`` field). When
-the project's ``CLAUDE.md`` / ``AGENTS.md`` do not yet contain the ``BDD.md``
-rule, the script appends it; when neither file exists, it creates ``CLAUDE.md``
-with the rule. It edits files in place, idempotently, and never blocks the
-session.
+SessionStart hook with a ``--host {claude|codex}`` argument baked in by the
+installer, and pass a JSON payload on stdin (with a ``cwd`` field).
+
+The host determines the *canonical* instruction file — ``CLAUDE.md`` for Claude
+Code, ``AGENTS.md`` for Codex. The script guarantees the canonical file carries
+the rule (creating it if absent), keeps any other existing instruction file in
+sync, and never creates the other host's file. It edits files in place,
+idempotently, and never blocks the session.
 
 ``BDD.md`` is located relative to this script's install directory
 (``<install>/scripts/check_bdd_sync.py`` -> ``<install>/BDD.md``), so it works
@@ -15,25 +18,35 @@ for both the copied Claude install and the symlinked Codex install.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
 from pathlib import Path
 
 INSTRUCTION_FILES = ("CLAUDE.md", "AGENTS.md")
-DEFAULT_INSTRUCTION_FILE = "CLAUDE.md"
+HOST_CANONICAL_FILE = {"claude": "CLAUDE.md", "codex": "AGENTS.md"}
+FALLBACK_INSTRUCTION_FILE = "CLAUDE.md"
 
 
 def main() -> int:
+    host = parse_host()
     bdd_content = read_bdd_content()
     if not bdd_content:
         return 0
 
     project_dir = resolve_project_dir(read_payload())
-    changed = sync_instructions(project_dir, bdd_content)
+    changed = sync_instructions(project_dir, bdd_content, host)
     if changed:
         emit_notice(changed)
     return 0
+
+
+def parse_host() -> str | None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--host", choices=tuple(HOST_CANONICAL_FILE))
+    args, _ = parser.parse_known_args()
+    return args.host
 
 
 def read_bdd_content() -> str:
@@ -67,20 +80,38 @@ def resolve_project_dir(payload: dict) -> Path:
     return Path.cwd()
 
 
-def sync_instructions(project_dir: Path, bdd_content: str) -> list[str]:
-    """Append the rule where missing. Returns the names of changed files."""
+def sync_instructions(project_dir: Path, bdd_content: str, host: str | None) -> list[str]:
+    """Keep the rule synced. Returns the names of changed files."""
     existing = existing_instruction_files(project_dir)
-    if existing:
-        changed = []
-        for path in existing:
-            if bdd_content not in read_text(path):
-                append_rule(path, bdd_content)
-                changed.append(path.name)
-        return changed
+    canonical = HOST_CANONICAL_FILE.get(host) if host else None
+    changed: list[str] = []
 
-    target = project_dir / DEFAULT_INSTRUCTION_FILE
-    create_rule_file(target, bdd_content)
-    return [target.name]
+    # 1. Ensure the host's canonical file carries the rule.
+    if canonical:
+        match = next((p for p in existing if p.name.lower() == canonical.lower()), None)
+        if match is None:
+            path = project_dir / canonical
+            create_rule_file(path, bdd_content)
+            changed.append(path.name)
+        elif bdd_content not in read_text(match):
+            append_rule(match, bdd_content)
+            changed.append(match.name)
+
+    # 2. Keep every other existing instruction file in sync.
+    for path in existing:
+        if canonical and path.name.lower() == canonical.lower():
+            continue
+        if bdd_content not in read_text(path):
+            append_rule(path, bdd_content)
+            changed.append(path.name)
+
+    # 3. No host given and nothing exists: fall back to creating CLAUDE.md.
+    if not canonical and not existing:
+        path = project_dir / FALLBACK_INSTRUCTION_FILE
+        create_rule_file(path, bdd_content)
+        changed.append(path.name)
+
+    return changed
 
 
 def existing_instruction_files(project_dir: Path) -> list[Path]:

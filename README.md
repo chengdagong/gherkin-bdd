@@ -42,54 +42,36 @@ After changing plugin components, run this inside Claude Code:
 
 ## Install With CLI
 
-Install this plugin into the current project for both Claude Code and Codex:
+Install this plugin into the **current directory**, one host at a time:
 
 ```bash
-bin/bdd-bootstrap
+bin/bdd-bootstrap claude   # Claude Code
+bin/bdd-bootstrap codex    # Codex
 ```
 
-Default install targets:
+The single positional argument (`claude` or `codex`) is required. The plugin source is the repository that ships `bin/bdd-bootstrap`; the install target is your current working directory — so `cd` into the project you want to set up, then run the command. Re-running is idempotent.
 
-- Claude Code: `.claude/skills/gherkin-bdd`
-- Claude Code session hook: `.claude/settings.json`
-- Codex plugin source: `.agents/plugins/plugins/gherkin-bdd`
-- Codex project marketplace: `.agents/plugins/marketplace.json`
-- Codex session hook: `.codex/hooks.json`
+Install targets:
 
-Claude Code files are copied into `.claude/skills/gherkin-bdd`, which makes the project plugin self-contained and easier to commit with the project.
+- Claude Code: `.claude/skills/gherkin-bdd` (copied) + a `SessionStart` hook in `.claude/settings.json`
+- Codex: `.agents/plugins/plugins/gherkin-bdd` (symlinked) + a marketplace entry in `.agents/plugins/marketplace.json` + a `SessionStart` hook in `.codex/hooks.json`
 
-Codex plugin files use symbolic links back to this repository, so changes to shared files such as `skills/gherkin-bdd/SKILL.md` take effect without copying files again.
+Claude Code files are copied, which makes the install self-contained and easy to commit with the project. Codex files are symbolic links back to this repository, so edits to shared files such as `skills/gherkin-bdd/SKILL.md` take effect without re-installing.
 
 `BDD.md` defines the project rule that every application feature should have a `.feature` file, and that Gherkin feature file is the source of truth for app behavior.
 
-During install, `bdd-bootstrap` checks the target project root for `CLAUDE.md` and `AGENTS.md` files. The check is case-insensitive, so `claude.md` and `agents.md` are handled too. If either file exists and does not already contain the full `BDD.md` content, the content is appended to the end of that file. If either file is missing, the CLI asks whether to create it with the `BDD.md` content.
+### BDD rule sync
 
-`bdd-bootstrap` also registers a `SessionStart` hook for each host so that every session keeps this sync up to date automatically. The hook runs `scripts/check_bdd_sync.py` whenever Claude Code or Codex starts (or resumes) a session in the project. If `BDD.md` is missing from `CLAUDE.md` / `AGENTS.md`, the hook appends it; if neither file exists, it creates `CLAUDE.md` with the rule. The sync is idempotent — once the rule is present the hook leaves the files untouched. The hook entry is merged into the host config (`.claude/settings.json` for Claude Code, `.codex/hooks.json` for Codex) without disturbing existing hooks, and re-running the installer is idempotent.
+The plugin keeps the `BDD.md` rule present in the host's instruction file — `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex — both at install time and on every session start. A single script, `scripts/check_bdd_sync.py`, does this:
 
-Claude Code only loads hooks from `settings.json` (or a registered plugin), not from a copied skill directory, which is why the hook lives in `.claude/settings.json` rather than the installed skill folder.
+- The installer runs it once (feeding it the same JSON payload a hook would), so the rule is in place immediately after install.
+- A `SessionStart` hook runs the **same** script on every session start/resume, so the rule stays in sync over time.
 
-This CLI only supports project-level installation. It does not write to `~/.claude`, `~/.agents`, or any other user-level plugin location.
+The script creates the host's canonical instruction file if it is missing, appends the rule to any existing instruction file that lacks it, and does nothing once the rule is present (idempotent). It never blocks the session. Claude Code only loads hooks from `settings.json` (or a registered plugin), not from a copied skill directory, which is why the hook lives in `.claude/settings.json`.
 
-Useful options:
+This CLI only supports project-level installation. It does not write to `~/.claude`, `~/.agents`, or any other user-level location.
 
-```bash
-bin/bdd-bootstrap show-paths
-bin/bdd-bootstrap --project-dir /path/to/project
-bin/bdd-bootstrap --target claude
-bin/bdd-bootstrap --target codex
-bin/bdd-bootstrap --force
-bin/bdd-bootstrap --dry-run
-bin/bdd-bootstrap --create-missing-instructions yes
-bin/bdd-bootstrap --create-missing-instructions no
-```
-
-For Claude Code, restart the session or run:
-
-```text
-/reload-plugins
-```
-
-For Codex, refresh local plugins after the project marketplace entry is written.
+For Claude Code, restart the session or run `/reload-plugins`. For Codex, refresh local plugins after the marketplace entry is written.
 
 ## Suggested Next Files
 

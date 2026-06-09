@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Install this plugin for Codex and Claude Code."""
+"""Install this plugin into the current directory for Claude Code or Codex.
+
+Usage:
+
+    bdd-bootstrap claude    # copy-install for Claude Code + register its hook
+    bdd-bootstrap codex     # symlink-install for Codex + register its hook
+
+The plugin source is the repository that ships this script; the install target
+is the current working directory. Re-running is idempotent.
+"""
 
 from __future__ import annotations
 
@@ -7,322 +16,139 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
-
 
 PLUGIN_NAME = "gherkin-bdd"
 DEFAULT_MARKETPLACE_NAME = "project"
 DEFAULT_MARKETPLACE_DISPLAY_NAME = "Project"
 DEFAULT_CATEGORY = "Productivity"
 SHARED_ENTRIES = ("skills", "docs", "examples", "scripts", "hooks", "README.md", "BDD.md")
-PROJECT_INSTRUCTION_FILES = ("CLAUDE.md", "AGENTS.md")
 CHECK_SCRIPT_RELPATH = "scripts/check_bdd_sync.py"
 SESSION_HOOK_MATCHER = "startup|resume"
 SESSION_HOOK_MARKER = "check_bdd_sync.py"
 SESSION_HOOK_STATUS = "Syncing BDD rule"
 
-
-@dataclass(frozen=True)
-class InstallPlan:
-    source: Path
-    project_dir: Path
-    plugin_name: str
-    targets: tuple[str, ...]
-    create_missing_instructions: str
-    force: bool
-    dry_run: bool
-    claude_dir: Path
-    codex_marketplace: Path
-    codex_plugin_dir: Path | None
-    claude_settings: Path
-    codex_hooks: Path
+SOURCE = Path(__file__).resolve().parent.parent
 
 
-def main(argv: list[str] | None = None, input_func=input) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    if args.command == "run":
-        plan = build_install_plan(args)
-        install(plan, input_func)
-        return 0
-    if args.command == "show-paths":
-        plan = build_install_plan(args)
-        print_paths(plan)
-        return 0
-    raise AssertionError(f"Unhandled command: {args.command}")
+    project_dir = Path.cwd()
+    if args.host == "claude":
+        install_claude(project_dir)
+    else:
+        install_codex(project_dir)
+    return 0
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    raw_args = sys.argv[1:] if argv is None else argv
-    if raw_args and raw_args[0] == "show-paths":
-        return parse_subcommand_args(raw_args)
-    return parse_install_args(raw_args)
-
-
-def parse_install_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="bdd-bootstrap",
-        description="Install this plugin into a project for Claude Code and Codex.",
-    )
-    add_common_options(parser)
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Replace an existing generated install directory or marketplace entry.",
+        description="Install this plugin into the current directory for Claude Code or Codex.",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the install actions without writing files.",
+        "host",
+        choices=("claude", "codex"),
+        help="Which host to install for.",
     )
-    parser.add_argument(
-        "--create-missing-instructions",
-        choices=("ask", "yes", "no"),
-        default="ask",
-        help=(
-            "Create missing CLAUDE.md or AGENTS.md with BDD.md content. "
-            "Defaults to ask."
-        ),
-    )
-    parser.set_defaults(command="run")
     return parser.parse_args(argv)
 
 
-def parse_subcommand_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="bdd-bootstrap",
-        description="Install this plugin into a project for Claude Code and Codex.",
+def install_claude(project_dir: Path) -> None:
+    target = project_dir / ".claude" / "skills" / PLUGIN_NAME
+    print(f"Claude Code target: {target} (copy)")
+    install_tree(target=target, host_manifest=".claude-plugin", install_mode="copy")
+
+    script = f".claude/skills/{PLUGIN_NAME}/{CHECK_SCRIPT_RELPATH}"
+    command = f'python3 "${{CLAUDE_PROJECT_DIR}}/{script}" --host claude'
+    register_hook(project_dir / ".claude" / "settings.json", command, status_message=None)
+    run_bdd_sync(project_dir, target / CHECK_SCRIPT_RELPATH, "claude")
+
+
+def install_codex(project_dir: Path) -> None:
+    plugin_dir = project_dir / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
+    print(f"Codex plugin target: {plugin_dir} (symlink)")
+    install_tree(target=plugin_dir, host_manifest=".codex-plugin", install_mode="symlink")
+    update_codex_marketplace(project_dir / ".agents" / "plugins" / "marketplace.json", plugin_dir)
+
+    command = f'python3 "{plugin_dir / CHECK_SCRIPT_RELPATH}" --host codex'
+    register_hook(project_dir / ".codex" / "hooks.json", command, status_message=SESSION_HOOK_STATUS)
+    run_bdd_sync(project_dir, plugin_dir / CHECK_SCRIPT_RELPATH, "codex")
+
+
+def run_bdd_sync(project_dir: Path, script: Path, host: str) -> None:
+    """Sync the BDD rule using the very same script the SessionStart hook runs.
+
+    The installer feeds the script the same JSON payload a SessionStart hook
+    would, so install-time and session-time sync share one implementation.
+    """
+    print(f"  sync BDD rule ({script.name} --host {host})")
+    payload = json.dumps(
+        {"cwd": str(project_dir), "hook_event_name": "SessionStart", "source": "startup"}
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    paths_parser = subparsers.add_parser("show-paths", help="Show resolved install paths")
-    add_common_options(paths_parser)
-
-    return parser.parse_args(argv)
-
-
-def add_common_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--source",
-        default=".",
-        help="Plugin source directory. Defaults to the current directory.",
+    result = subprocess.run(
+        [sys.executable, str(script), "--host", host],
+        input=payload,
+        capture_output=True,
+        text=True,
     )
-    parser.add_argument(
-        "--project-dir",
-        default=".",
-        help="Project directory to install into. Defaults to the current directory.",
-    )
-    parser.add_argument(
-        "--plugin-name",
-        default=PLUGIN_NAME,
-        help=f"Plugin name and namespace. Defaults to {PLUGIN_NAME}.",
-    )
-    parser.add_argument(
-        "--target",
-        choices=("both", "claude", "codex"),
-        default="both",
-        help="Which host to install for. Defaults to both.",
-    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr)
+        raise SystemExit(f"BDD sync failed ({script}).")
+    message = read_system_message(result.stdout)
+    if message:
+        print(f"  {message}")
 
 
-def build_install_plan(args: argparse.Namespace) -> InstallPlan:
-    source = Path(args.source).expanduser().resolve()
-    project_dir = Path(args.project_dir).expanduser().resolve()
-    plugin_name = normalize_plugin_name(args.plugin_name)
-    if not plugin_name:
-        raise SystemExit("Plugin name must include at least one ASCII letter or digit.")
-
-    targets = ("claude", "codex") if args.target == "both" else (args.target,)
-    claude_dir = project_dir / ".claude" / "skills"
-    codex_marketplace = project_dir / ".agents" / "plugins" / "marketplace.json"
-    codex_plugin_dir = codex_marketplace.parent / "plugins" / plugin_name
-    claude_settings = project_dir / ".claude" / "settings.json"
-    codex_hooks = project_dir / ".codex" / "hooks.json"
-
-    return InstallPlan(
-        source=source,
-        project_dir=project_dir,
-        plugin_name=plugin_name,
-        targets=targets,
-        create_missing_instructions=getattr(args, "create_missing_instructions", "ask"),
-        force=getattr(args, "force", False),
-        dry_run=getattr(args, "dry_run", False),
-        claude_dir=claude_dir,
-        codex_marketplace=codex_marketplace,
-        codex_plugin_dir=codex_plugin_dir,
-        claude_settings=claude_settings,
-        codex_hooks=codex_hooks,
-    )
+def read_system_message(stdout: str) -> str | None:
+    stdout = stdout.strip()
+    if not stdout:
+        return None
+    try:
+        return json.loads(stdout).get("systemMessage")
+    except json.JSONDecodeError:
+        return None
 
 
-def normalize_plugin_name(raw_name: str) -> str:
-    chars: list[str] = []
-    previous_was_dash = False
-    for char in raw_name.strip().lower():
-        if char.isascii() and char.isalnum():
-            chars.append(char)
-            previous_was_dash = False
-        elif not previous_was_dash:
-            chars.append("-")
-            previous_was_dash = True
-    return "".join(chars).strip("-")
-
-
-def install(plan: InstallPlan, input_func=input) -> None:
-    validate_source(plan.source)
-    if "claude" in plan.targets:
-        install_claude(plan)
-    if "codex" in plan.targets:
-        install_codex(plan)
-    append_bdd_requirements(plan, input_func)
-
-
-def validate_source(source: Path) -> None:
-    required_paths = (
-        source / ".claude-plugin" / "plugin.json",
-        source / ".codex-plugin" / "plugin.json",
-        source / "BDD.md",
-        source / "skills",
-    )
-    missing = [str(path) for path in required_paths if not path.exists()]
-    if missing:
-        raise SystemExit("Plugin source is missing required paths:\n" + "\n".join(missing))
-
-
-def install_claude(plan: InstallPlan) -> None:
-    target = plan.claude_dir / plan.plugin_name
-    print(f"Claude Code target: {target}")
-    print("  mode: copy")
-    install_tree(
-        source=plan.source,
-        target=target,
-        host_manifest=".claude-plugin",
-        shared_entries=SHARED_ENTRIES,
-        install_mode="copy",
-        force=plan.force,
-        dry_run=plan.dry_run,
-    )
-    register_claude_hook(plan)
-
-
-def install_codex(plan: InstallPlan) -> None:
-    if plan.codex_plugin_dir is None:
-        raise AssertionError("codex_plugin_dir should be resolved")
-
-    print(f"Codex plugin target: {plan.codex_plugin_dir}")
-    print("  mode: symlink")
-    install_tree(
-        source=plan.source,
-        target=plan.codex_plugin_dir,
-        host_manifest=".codex-plugin",
-        shared_entries=SHARED_ENTRIES,
-        install_mode="symlink",
-        force=plan.force,
-        dry_run=plan.dry_run,
-    )
-    update_codex_marketplace(plan)
-    register_codex_hook(plan)
-
-
-def install_tree(
-    *,
-    source: Path,
-    target: Path,
-    host_manifest: str,
-    shared_entries: Iterable[str],
-    install_mode: str,
-    force: bool,
-    dry_run: bool,
-) -> None:
+def install_tree(*, target: Path, host_manifest: str, install_mode: str) -> None:
     if target.exists() or target.is_symlink():
-        if not force:
-            raise SystemExit(f"{target} already exists. Re-run with --force to replace it.")
-        remove_path(target, dry_run)
-
-    mkdir(target, dry_run)
-    link_or_copy(source / host_manifest, target / host_manifest, install_mode, dry_run)
-    for entry_name in shared_entries:
-        entry = source / entry_name
+        remove_path(target)
+    target.mkdir(parents=True, exist_ok=True)
+    link_or_copy(SOURCE / host_manifest, target / host_manifest, install_mode)
+    for entry_name in SHARED_ENTRIES:
+        entry = SOURCE / entry_name
         if entry.exists():
-            link_or_copy(entry, target / entry_name, install_mode, dry_run)
+            link_or_copy(entry, target / entry_name, install_mode)
 
 
-def update_codex_marketplace(plan: InstallPlan) -> None:
-    marketplace = plan.codex_marketplace
-    print(f"Codex project marketplace: {marketplace}")
-    entry_path = relative_source_path(marketplace.parent, plan.codex_plugin_dir)
-
+def update_codex_marketplace(marketplace: Path, plugin_dir: Path) -> None:
+    print(f"Codex marketplace: {marketplace}")
+    entry_path = relative_source_path(marketplace.parent, plugin_dir)
     payload = read_marketplace(marketplace)
     plugins = payload.setdefault("plugins", [])
     if not isinstance(plugins, list):
         raise SystemExit(f"{marketplace} field 'plugins' must be an array.")
 
     new_entry = {
-        "name": plan.plugin_name,
-        "source": {
-            "source": "local",
-            "path": entry_path,
-        },
-        "policy": {
-            "installation": "AVAILABLE",
-            "authentication": "ON_INSTALL",
-        },
+        "name": PLUGIN_NAME,
+        "source": {"source": "local", "path": entry_path},
+        "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
         "category": DEFAULT_CATEGORY,
     }
-
     for index, existing in enumerate(plugins):
-        if isinstance(existing, dict) and existing.get("name") == plan.plugin_name:
-            if not plan.force and existing != new_entry:
-                raise SystemExit(
-                    f"{marketplace} already contains '{plan.plugin_name}'. "
-                    "Re-run with --force to replace that entry."
-                )
+        if isinstance(existing, dict) and existing.get("name") == PLUGIN_NAME:
             plugins[index] = new_entry
             break
     else:
         plugins.append(new_entry)
-
-    write_json(marketplace, payload, plan.dry_run)
-
-
-def register_claude_hook(plan: InstallPlan) -> None:
-    script = f".claude/skills/{plan.plugin_name}/{CHECK_SCRIPT_RELPATH}"
-    command = f'python3 "${{CLAUDE_PROJECT_DIR}}/{script}"'
-    print(f"Claude Code session hook: {plan.claude_settings}")
-    upsert_session_start_hook(
-        config_path=plan.claude_settings,
-        command=command,
-        status_message=None,
-        force=plan.force,
-        dry_run=plan.dry_run,
-    )
+    write_json(marketplace, payload)
 
 
-def register_codex_hook(plan: InstallPlan) -> None:
-    if plan.codex_plugin_dir is None:
-        raise AssertionError("codex_plugin_dir should be resolved")
-    script = plan.codex_plugin_dir / CHECK_SCRIPT_RELPATH
-    command = f'python3 "{script}"'
-    print(f"Codex session hook: {plan.codex_hooks}")
-    upsert_session_start_hook(
-        config_path=plan.codex_hooks,
-        command=command,
-        status_message=SESSION_HOOK_STATUS,
-        force=plan.force,
-        dry_run=plan.dry_run,
-    )
-
-
-def upsert_session_start_hook(
-    *,
-    config_path: Path,
-    command: str,
-    status_message: str | None,
-    force: bool,
-    dry_run: bool,
-) -> None:
-    payload = read_hook_config(config_path)
+def register_hook(config_path: Path, command: str, status_message: str | None) -> None:
+    print(f"Session hook: {config_path}")
+    payload = read_json_object(config_path)
     hooks = payload.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise SystemExit(f"{config_path} field 'hooks' must be an object.")
@@ -334,19 +160,17 @@ def upsert_session_start_hook(
         "matcher": SESSION_HOOK_MATCHER,
         "hooks": [build_hook_command(command, status_message)],
     }
-    existing_index = find_session_hook_index(session_start)
-    if existing_index is not None:
-        if not force and session_start[existing_index] == entry:
-            print(f"  already registered in {config_path}")
+    index = find_hook_index(session_start)
+    if index is not None:
+        if session_start[index] == entry:
+            print("  hook already current")
             return
-        if not force:
-            print(f"  update SessionStart check in {config_path}")
-        session_start[existing_index] = entry
+        print("  update hook")
+        session_start[index] = entry
     else:
-        print(f"  add SessionStart check to {config_path}")
+        print("  add hook")
         session_start.append(entry)
-
-    write_json(config_path, payload, dry_run)
+    write_json(config_path, payload)
 
 
 def build_hook_command(command: str, status_message: str | None) -> dict:
@@ -356,7 +180,7 @@ def build_hook_command(command: str, status_message: str | None) -> dict:
     return hook
 
 
-def find_session_hook_index(session_start: list) -> int | None:
+def find_hook_index(session_start: list) -> int | None:
     for index, entry in enumerate(session_start):
         if not isinstance(entry, dict):
             continue
@@ -366,7 +190,7 @@ def find_session_hook_index(session_start: list) -> int | None:
     return None
 
 
-def read_hook_config(path: Path) -> dict:
+def read_json_object(path: Path) -> dict:
     if not path.exists():
         return {}
     try:
@@ -378,112 +202,14 @@ def read_hook_config(path: Path) -> dict:
     return payload
 
 
-def append_bdd_requirements(plan: InstallPlan, input_func=input) -> None:
-    bdd_path = plan.source / "BDD.md"
-    bdd_content = bdd_path.read_text(encoding="utf-8").strip()
-    if not bdd_content:
-        raise SystemExit(f"{bdd_path} must not be empty.")
-
-    instruction_files = find_project_instruction_files(plan.project_dir)
-    for path in instruction_files:
-        append_bdd_to_instruction_file(path, bdd_content, plan.dry_run)
-    create_missing_instruction_files(plan, instruction_files, bdd_content, input_func)
-
-
-def find_project_instruction_files(project_dir: Path) -> list[Path]:
-    if not project_dir.exists():
-        return []
-    expected_names = {name.lower() for name in PROJECT_INSTRUCTION_FILES}
-    return sorted(
-        path
-        for path in project_dir.iterdir()
-        if path.is_file() and path.name.lower() in expected_names
-    )
-
-
-def create_missing_instruction_files(
-    plan: InstallPlan,
-    existing_files: list[Path],
-    bdd_content: str,
-    input_func=input,
-) -> None:
-    existing_names = {path.name.lower() for path in existing_files}
-    missing_files = [
-        plan.project_dir / name
-        for name in PROJECT_INSTRUCTION_FILES
-        if name.lower() not in existing_names
-    ]
-    if not missing_files:
-        return
-
-    for path in missing_files:
-        if should_create_instruction_file(path, plan, input_func):
-            create_instruction_file(path, bdd_content, plan.dry_run)
-        else:
-            print(f"Project instructions: skipped missing {path}")
-
-
-def should_create_instruction_file(path: Path, plan: InstallPlan, input_func=input) -> bool:
-    if plan.dry_run:
-        print(f"Project instructions: missing {path}")
-        return False
-    if plan.create_missing_instructions == "yes":
-        return True
-    if plan.create_missing_instructions == "no":
-        return False
-
-    try:
-        answer = input_func(f"Create {path} with BDD.md content? [y/N] ")
-    except EOFError:
-        return False
-    return answer.strip().lower() in {"y", "yes"}
-
-
-def create_instruction_file(path: Path, bdd_content: str, dry_run: bool) -> None:
-    print(f"Project instructions: create {path}")
-    if dry_run:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(bdd_content + "\n", encoding="utf-8")
-
-
-def append_bdd_to_instruction_file(path: Path, bdd_content: str, dry_run: bool) -> None:
-    existing = path.read_text(encoding="utf-8")
-    if bdd_content in existing:
-        print(f"Project instructions: {path} already contains BDD.md")
-        return
-
-    print(f"Project instructions: append BDD.md to {path}")
-    if dry_run:
-        return
-
-    separator = "\n\n" if existing.strip() else ""
-    path.write_text(existing.rstrip() + separator + bdd_content + "\n", encoding="utf-8")
-
-
 def read_marketplace(path: Path) -> dict:
-    if not path.exists():
-        return {
-            "name": DEFAULT_MARKETPLACE_NAME,
-            "interface": {
-                "displayName": DEFAULT_MARKETPLACE_DISPLAY_NAME,
-            },
-            "plugins": [],
-        }
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
-        raise SystemExit(f"{path} is not valid JSON: {error}") from error
-    if not isinstance(payload, dict):
-        raise SystemExit(f"{path} must contain a JSON object.")
+    payload = read_json_object(path)
     payload.setdefault("name", DEFAULT_MARKETPLACE_NAME)
     payload.setdefault("interface", {"displayName": DEFAULT_MARKETPLACE_DISPLAY_NAME})
     return payload
 
 
-def relative_source_path(base: Path, target: Path | None) -> str:
-    if target is None:
-        raise AssertionError("target should be resolved")
+def relative_source_path(base: Path, target: Path) -> str:
     try:
         relative = os.path.relpath(target, base)
     except ValueError:
@@ -493,25 +219,21 @@ def relative_source_path(base: Path, target: Path | None) -> str:
     return f"./{Path(relative).as_posix()}"
 
 
-def link_or_copy(source: Path, target: Path, link_mode: str, dry_run: bool) -> None:
-    if link_mode == "copy":
-        copy_path(source, target, dry_run)
+def link_or_copy(source: Path, target: Path, install_mode: str) -> None:
+    if install_mode == "copy":
+        copy_path(source, target)
         return
-    symlink(source, target, dry_run)
+    symlink(source, target)
 
 
-def symlink(source: Path, target: Path, dry_run: bool) -> None:
+def symlink(source: Path, target: Path) -> None:
     print(f"  symlink {target} -> {source}")
-    if dry_run:
-        return
     target.parent.mkdir(parents=True, exist_ok=True)
     target.symlink_to(source, target_is_directory=source.is_dir())
 
 
-def copy_path(source: Path, target: Path, dry_run: bool) -> None:
-    print(f"  copy {source} -> {target}")
-    if dry_run:
-        return
+def copy_path(source: Path, target: Path) -> None:
+    print(f"  copy {source.name}")
     target.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
         shutil.copytree(source, target)
@@ -519,40 +241,18 @@ def copy_path(source: Path, target: Path, dry_run: bool) -> None:
         shutil.copy2(source, target)
 
 
-def mkdir(path: Path, dry_run: bool) -> None:
-    print(f"  mkdir {path}")
-    if not dry_run:
-        path.mkdir(parents=True, exist_ok=True)
-
-
-def remove_path(path: Path, dry_run: bool) -> None:
+def remove_path(path: Path) -> None:
     print(f"  replace {path}")
-    if dry_run:
-        return
     if path.is_symlink() or path.is_file():
         path.unlink()
     else:
         shutil.rmtree(path)
 
 
-def write_json(path: Path, payload: dict, dry_run: bool) -> None:
+def write_json(path: Path, payload: dict) -> None:
     print(f"  write {path}")
-    if dry_run:
-        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def print_paths(plan: InstallPlan) -> None:
-    print(f"Source: {plan.source}")
-    print(f"Project: {plan.project_dir}")
-    if "claude" in plan.targets:
-        print(f"Claude Code: {plan.claude_dir / plan.plugin_name}")
-        print(f"Claude Code session hook: {plan.claude_settings}")
-    if "codex" in plan.targets:
-        print(f"Codex plugin: {plan.codex_plugin_dir}")
-        print(f"Codex project marketplace: {plan.codex_marketplace}")
-        print(f"Codex session hook: {plan.codex_hooks}")
 
 
 if __name__ == "__main__":

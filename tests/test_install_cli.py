@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CLI_PATH = ROOT / "bin" / "bdd-bootstrap"
 CHECK_SCRIPT = ROOT / "scripts" / "check_bdd_sync.py"
+BDD_CONTENT = (ROOT / "BDD.md").read_text(encoding="utf-8").strip()
 
 
 def load_cli():
@@ -31,245 +33,85 @@ class InstallCliTest(unittest.TestCase):
         self.cli = load_cli()
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
+        self._old_cwd = os.getcwd()
+        os.chdir(self.root)
 
     def tearDown(self) -> None:
+        os.chdir(self._old_cwd)
         self.tmp.cleanup()
 
-    def test_installs_claude_copy_and_codex_symlink_targets(self) -> None:
-        project_dir = self.root / "project"
+    # --- install: claude ---------------------------------------------------
 
-        exit_code = self.cli.main(
-            [
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--create-missing-instructions",
-                "no",
-            ]
+    def test_claude_install_copies_tree_and_registers_hook(self) -> None:
+        self.assertEqual(self.cli.main(["claude"]), 0)
+
+        plugin = self.root / ".claude" / "skills" / "gherkin-bdd"
+        self.assertTrue((plugin / ".claude-plugin" / "plugin.json").exists())
+        self.assertTrue((plugin / "skills" / "gherkin-bdd" / "SKILL.md").exists())
+        self.assertTrue((plugin / "BDD.md").exists())
+        self.assertFalse((plugin / "skills").is_symlink())
+
+        settings = json.loads((self.root / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        self.assertIn("check_bdd_sync.py", command)
+        self.assertIn("--host claude", command)
+        self.assertIn("${CLAUDE_PROJECT_DIR}", command)
+
+    # --- install: codex ----------------------------------------------------
+
+    def test_codex_install_symlinks_tree_and_registers_hook(self) -> None:
+        self.assertEqual(self.cli.main(["codex"]), 0)
+
+        plugin = self.root / ".agents" / "plugins" / "plugins" / "gherkin-bdd"
+        self.assertTrue((plugin / ".codex-plugin").is_symlink())
+        self.assertTrue((plugin / "skills").is_symlink())
+        self.assertTrue((plugin / "BDD.md").is_symlink())
+
+        marketplace = json.loads(
+            (self.root / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8")
         )
+        self.assertEqual(marketplace["plugins"][0]["name"], "gherkin-bdd")
+        self.assertEqual(marketplace["plugins"][0]["source"]["path"], "./plugins/gherkin-bdd")
 
-        self.assertEqual(exit_code, 0)
-        claude_plugin = project_dir / ".claude" / "skills" / "gherkin-bdd"
-        marketplace = project_dir / ".agents" / "plugins" / "marketplace.json"
-        codex_plugin = marketplace.parent / "plugins" / "gherkin-bdd"
+        hooks = json.loads((self.root / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+        command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        self.assertIn("check_bdd_sync.py", command)
+        self.assertIn("--host codex", command)
+        self.assertIn(".agents/plugins/plugins/gherkin-bdd", command)
 
-        self.assertTrue((claude_plugin / ".claude-plugin" / "plugin.json").exists())
-        self.assertTrue((claude_plugin / "skills" / "gherkin-bdd" / "SKILL.md").exists())
-        self.assertTrue((claude_plugin / "BDD.md").exists())
-        self.assertFalse((claude_plugin / ".claude-plugin").is_symlink())
-        self.assertFalse((claude_plugin / "skills").is_symlink())
-        self.assertTrue((codex_plugin / ".codex-plugin").is_symlink())
-        self.assertTrue((codex_plugin / "skills").is_symlink())
-        self.assertTrue((codex_plugin / "BDD.md").is_symlink())
+    # --- install: shared behavior ------------------------------------------
 
-        payload = json.loads(marketplace.read_text(encoding="utf-8"))
-        self.assertEqual(payload["name"], "project")
-        self.assertEqual(payload["plugins"][0]["name"], "gherkin-bdd")
-        self.assertEqual(payload["plugins"][0]["source"]["path"], "./plugins/gherkin-bdd")
+    def test_install_is_idempotent(self) -> None:
+        self.assertEqual(self.cli.main(["claude"]), 0)
+        self.assertEqual(self.cli.main(["claude"]), 0)
 
-    def test_target_claude_only_copies_shared_files(self) -> None:
-        project_dir = self.root / "project"
+        plugin = self.root / ".claude" / "skills" / "gherkin-bdd"
+        self.assertTrue((plugin / "skills" / "gherkin-bdd" / "SKILL.md").exists())
+        settings = json.loads((self.root / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(settings["hooks"]["SessionStart"]), 1)
 
-        exit_code = self.cli.main(
-            [
-                "--target",
-                "claude",
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--create-missing-instructions",
-                "no",
-            ]
-        )
+    def test_install_claude_syncs_claude_md_via_check_script(self) -> None:
+        self.assertEqual(self.cli.main(["claude"]), 0)
+        self.assertEqual((self.root / "CLAUDE.md").read_text(encoding="utf-8").strip(), BDD_CONTENT)
+        self.assertFalse((self.root / "AGENTS.md").exists())
 
-        self.assertEqual(exit_code, 0)
-        claude_dir = project_dir / ".claude" / "skills"
-        skill = claude_dir / "gherkin-bdd" / "skills" / "gherkin-bdd" / "SKILL.md"
-        self.assertTrue(skill.exists())
-        self.assertFalse((claude_dir / "gherkin-bdd" / "skills").is_symlink())
+    def test_install_codex_syncs_agents_md_via_check_script(self) -> None:
+        self.assertEqual(self.cli.main(["codex"]), 0)
+        self.assertEqual((self.root / "AGENTS.md").read_text(encoding="utf-8").strip(), BDD_CONTENT)
+        self.assertFalse((self.root / "CLAUDE.md").exists())
 
-    def test_appends_bdd_md_to_existing_project_instruction_files(self) -> None:
-        project_dir = self.root / "project"
-        project_dir.mkdir()
-        claude_md = project_dir / "CLAUDE.md"
-        agents_md = project_dir / "agents.md"
-        claude_md.write_text("# Claude\n", encoding="utf-8")
-        agents_md.write_text("# Agents\n", encoding="utf-8")
+    def test_invalid_host_exits(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.cli.main(["github"])
 
-        exit_code = self.cli.main(
-            [
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--create-missing-instructions",
-                "no",
-            ]
-        )
+    # --- check script: host-aware sync -------------------------------------
 
-        self.assertEqual(exit_code, 0)
-        bdd_content = (ROOT / "BDD.md").read_text(encoding="utf-8").strip()
-        self.assertIn(bdd_content, claude_md.read_text(encoding="utf-8"))
-        self.assertIn(bdd_content, agents_md.read_text(encoding="utf-8"))
-
-        self.cli.main(
-            [
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--force",
-                "--create-missing-instructions",
-                "no",
-            ]
-        )
-
-        self.assertEqual(claude_md.read_text(encoding="utf-8").count(bdd_content), 1)
-        self.assertEqual(agents_md.read_text(encoding="utf-8").count(bdd_content), 1)
-
-    def test_does_not_create_missing_project_instruction_files(self) -> None:
-        project_dir = self.root / "project"
-
-        exit_code = self.cli.main(
-            [
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--create-missing-instructions",
-                "no",
-            ]
-        )
-
-        self.assertEqual(exit_code, 0)
-        self.assertFalse((project_dir / "CLAUDE.md").exists())
-        self.assertFalse((project_dir / "AGENTS.md").exists())
-
-    def test_creates_missing_project_instruction_files_when_enabled(self) -> None:
-        project_dir = self.root / "project"
-
-        exit_code = self.cli.main(
-            [
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--create-missing-instructions",
-                "yes",
-            ]
-        )
-
-        self.assertEqual(exit_code, 0)
-        bdd_content = (ROOT / "BDD.md").read_text(encoding="utf-8").strip()
-        self.assertEqual((project_dir / "CLAUDE.md").read_text(encoding="utf-8").strip(), bdd_content)
-        self.assertEqual((project_dir / "AGENTS.md").read_text(encoding="utf-8").strip(), bdd_content)
-
-    def test_asks_before_creating_missing_project_instruction_files(self) -> None:
-        project_dir = self.root / "project"
-        answers = iter(["y", "n"])
-
-        exit_code = self.cli.main(
-            [
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-            ],
-            input_func=lambda _prompt: next(answers),
-        )
-
-        self.assertEqual(exit_code, 0)
-        self.assertTrue((project_dir / "CLAUDE.md").exists())
-        self.assertFalse((project_dir / "AGENTS.md").exists())
-
-    def test_registers_session_start_hook_for_both_hosts(self) -> None:
-        project_dir = self.root / "project"
-
-        exit_code = self.cli.main(
-            [
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--create-missing-instructions",
-                "no",
-            ]
-        )
-
-        self.assertEqual(exit_code, 0)
-        claude_settings = json.loads((project_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
-        claude_hook = claude_settings["hooks"]["SessionStart"][0]["hooks"][0]
-        self.assertIn("check_bdd_sync.py", claude_hook["command"])
-        self.assertIn("${CLAUDE_PROJECT_DIR}", claude_hook["command"])
-
-        codex_hooks = json.loads((project_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-        codex_hook = codex_hooks["hooks"]["SessionStart"][0]["hooks"][0]
-        self.assertIn("check_bdd_sync.py", codex_hook["command"])
-        self.assertIn(".agents/plugins/plugins/gherkin-bdd", codex_hook["command"])
-
-    def test_session_start_hook_is_idempotent(self) -> None:
-        project_dir = self.root / "project"
-        base_args = [
-            "--source",
-            str(ROOT),
-            "--project-dir",
-            str(project_dir),
-            "--create-missing-instructions",
-            "no",
-        ]
-
-        self.cli.main(base_args)
-        self.cli.main(base_args + ["--force"])
-
-        claude_settings = json.loads((project_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(claude_settings["hooks"]["SessionStart"]), 1)
-        codex_hooks = json.loads((project_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(codex_hooks["hooks"]["SessionStart"]), 1)
-
-    def test_session_hook_preserves_existing_settings(self) -> None:
-        project_dir = self.root / "project"
-        (project_dir / ".claude").mkdir(parents=True)
-        (project_dir / ".claude" / "settings.json").write_text(
-            json.dumps(
-                {
-                    "hooks": {
-                        "SessionStart": [
-                            {"matcher": "startup", "hooks": [{"type": "command", "command": "echo other"}]}
-                        ]
-                    }
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        exit_code = self.cli.main(
-            [
-                "--target",
-                "claude",
-                "--source",
-                str(ROOT),
-                "--project-dir",
-                str(project_dir),
-                "--create-missing-instructions",
-                "no",
-            ]
-        )
-
-        self.assertEqual(exit_code, 0)
-        settings = json.loads((project_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
-        commands = [
-            hook["command"]
-            for entry in settings["hooks"]["SessionStart"]
-            for hook in entry["hooks"]
-        ]
-        self.assertIn("echo other", commands)
-        self.assertTrue(any("check_bdd_sync.py" in command for command in commands))
-
-    def _run_check(self, project_dir: Path) -> str:
+    def _run_check(self, project_dir: Path, host: str | None) -> str:
+        command = [sys.executable, str(CHECK_SCRIPT)]
+        if host:
+            command += ["--host", host]
         result = subprocess.run(
-            [sys.executable, str(CHECK_SCRIPT)],
+            command,
             input=json.dumps(
                 {"cwd": str(project_dir), "hook_event_name": "SessionStart", "source": "startup"}
             ),
@@ -279,36 +121,46 @@ class InstallCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
 
-    def test_check_script_appends_rule_into_existing_file(self) -> None:
-        project_dir = self.root / "project"
-        project_dir.mkdir()
-        (project_dir / "CLAUDE.md").write_text("# Project\n", encoding="utf-8")
-        bdd_content = (ROOT / "BDD.md").read_text(encoding="utf-8").strip()
+    def test_check_claude_creates_claude_md(self) -> None:
+        project = self.root / "project"
+        project.mkdir()
 
-        payload = json.loads(self._run_check(project_dir))
-        self.assertEqual(payload["hookSpecificOutput"]["hookEventName"], "SessionStart")
+        payload = json.loads(self._run_check(project, host="claude"))
         self.assertIn("CLAUDE.md", payload["hookSpecificOutput"]["additionalContext"])
-        self.assertIn(bdd_content, (project_dir / "CLAUDE.md").read_text(encoding="utf-8"))
+        self.assertEqual((project / "CLAUDE.md").read_text(encoding="utf-8").strip(), BDD_CONTENT)
+        self.assertFalse((project / "AGENTS.md").exists())
 
-    def test_check_script_is_idempotent_when_rule_present(self) -> None:
-        project_dir = self.root / "project"
-        project_dir.mkdir()
-        bdd_content = (ROOT / "BDD.md").read_text(encoding="utf-8").strip()
-        (project_dir / "CLAUDE.md").write_text("# Project\n\n" + bdd_content + "\n", encoding="utf-8")
+    def test_check_codex_creates_agents_md(self) -> None:
+        project = self.root / "project"
+        project.mkdir()
 
-        self.assertEqual(self._run_check(project_dir).strip(), "")
-        self.assertEqual(
-            (project_dir / "CLAUDE.md").read_text(encoding="utf-8").count(bdd_content), 1
-        )
+        self._run_check(project, host="codex")
+        self.assertEqual((project / "AGENTS.md").read_text(encoding="utf-8").strip(), BDD_CONTENT)
+        self.assertFalse((project / "CLAUDE.md").exists())
 
-    def test_check_script_creates_claude_md_when_none_exist(self) -> None:
-        project_dir = self.root / "project"
-        project_dir.mkdir()
-        bdd_content = (ROOT / "BDD.md").read_text(encoding="utf-8").strip()
+    def test_check_claude_creates_canonical_and_syncs_existing(self) -> None:
+        project = self.root / "project"
+        project.mkdir()
+        (project / "AGENTS.md").write_text("# Agents\n", encoding="utf-8")
 
-        payload = json.loads(self._run_check(project_dir))
-        self.assertIn("CLAUDE.md", payload["hookSpecificOutput"]["additionalContext"])
-        self.assertEqual((project_dir / "CLAUDE.md").read_text(encoding="utf-8").strip(), bdd_content)
+        self._run_check(project, host="claude")
+        self.assertIn(BDD_CONTENT, (project / "CLAUDE.md").read_text(encoding="utf-8"))
+        self.assertIn(BDD_CONTENT, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_check_idempotent_when_rule_present(self) -> None:
+        project = self.root / "project"
+        project.mkdir()
+        (project / "CLAUDE.md").write_text("# Project\n\n" + BDD_CONTENT + "\n", encoding="utf-8")
+
+        self.assertEqual(self._run_check(project, host="claude").strip(), "")
+        self.assertEqual((project / "CLAUDE.md").read_text(encoding="utf-8").count(BDD_CONTENT), 1)
+
+    def test_check_fallback_creates_claude_md_without_host(self) -> None:
+        project = self.root / "project"
+        project.mkdir()
+
+        self._run_check(project, host=None)
+        self.assertEqual((project / "CLAUDE.md").read_text(encoding="utf-8").strip(), BDD_CONTENT)
 
 
 if __name__ == "__main__":
