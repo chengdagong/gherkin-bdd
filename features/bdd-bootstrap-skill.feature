@@ -21,7 +21,10 @@ Feature: Bootstrap skill
     When the user invokes the bdd-bootstrap skill naming the codex host
     Then the installer runs for the codex host in the current project
 
-  @agent
+  # TODO: not stageable yet — both shipped hosts always know their own identity,
+  # so the Given is unreachable. Unblocked when a host without reliable
+  # self-identity is supported.
+  @agent @todo
   Scenario: The host cannot be determined
     Given a session whose host cannot be identified
     When the user invokes the bdd-bootstrap skill without naming a host

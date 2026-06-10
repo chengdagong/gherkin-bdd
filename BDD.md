@@ -25,4 +25,6 @@ Every feature implementation follows red-green order:
 
 Do not start implementing before step 3, and do not mark work complete before step 5.
 
-Scenarios that can only be verified by observing agent behavior in a live session are exempt from automation: tag them `@agent` in the `.feature` file and verify them with an agent-in-the-loop check instead. Every untagged scenario must have at least one automated test that traces back to it.
+Every scenario must have at least one automated test that traces back to it. Scenarios that can only be verified by observing agent behavior are tagged `@agent` in the `.feature` file; their tests drive a live agent session (for example through a headless host CLI) and run on demand, outside the default test run, because they cost real model calls. An `@agent` tag changes where a test runs, not whether it exists.
+
+A scenario whose test cannot be built yet is tagged `@todo`, with an adjacent comment recording why and what unblocks it. `@todo` scenarios are tracked debt — reviewed when conditions change, never silently dropped.

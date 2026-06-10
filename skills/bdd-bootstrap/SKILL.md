@@ -29,7 +29,9 @@ in place.
      it directly.
    - Otherwise ask the user where their clone of `gherkin-bdd` lives, or offer
      to clone `https://github.com/chengdagong/gherkin-bdd` to a location they
-     choose.
+     choose. Cloning and installing need the user's consent: if you are running
+     non-interactively and cannot ask, report that the source repository is
+     needed and stop — do not clone or install on your own.
 
 3. **Run it from the project root.** The installer installs into the current
    working directory:
@@ -43,3 +45,8 @@ in place.
    `BDD.md`. Remind them to restart the session (or reload skills) so newly
    installed skills are discovered, and to commit the installed files with the
    project.
+
+Note for Codex sessions: the sandbox may refuse writes to `.codex/hooks.json`
+(Codex protects its own config). If that write is blocked and cannot be
+approved, report it and tell the user to run `bin/bdd-bootstrap codex` from a
+regular terminal to finish hook registration.

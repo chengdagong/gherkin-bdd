@@ -63,4 +63,4 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pytest
 ```
 
-打了 `@agent` 标签的场景不参与自动化，改由 agent-in-the-loop 方式验证。
+打了 `@agent` 标签的场景由真实 agent 会话驱动测试（实际调用 `claude` / `codex` CLI）；默认运行中被排除，按需在普通终端用 `pytest -m "agent and not todo"` 执行。

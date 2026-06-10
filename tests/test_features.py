@@ -222,6 +222,33 @@ def bootstrap_skill_installed(project: Path) -> None:
     assert [p.name for p in bootstrap_dir.iterdir()] == ["SKILL.md"]
 
 
+# --- Spec hygiene -------------------------------------------------------------
+
+
+def test_every_todo_scenario_records_its_debt() -> None:
+    """@todo scenarios must carry an adjacent '# TODO' comment (why + unblock)."""
+    offenders = []
+    for feature in sorted((ROOT / "features").glob("*.feature")):
+        lines = feature.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped.startswith("@") or "@todo" not in stripped.split():
+                continue
+            cursor = index - 1
+            while cursor >= 0 and lines[cursor].strip().startswith("@"):
+                cursor -= 1
+            comment_block = []
+            while cursor >= 0 and lines[cursor].strip().startswith("#"):
+                comment_block.append(lines[cursor])
+                cursor -= 1
+            if not any("TODO" in comment for comment in comment_block):
+                offenders.append(f"{feature.name}:{index + 1}")
+    assert not offenders, (
+        "@todo scenarios missing an adjacent '# TODO' comment recording why the "
+        f"test cannot be built yet and what unblocks it: {offenders}"
+    )
+
+
 # --- Regression guards not tied to a scenario --------------------------------
 
 

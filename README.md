@@ -63,4 +63,4 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pytest
 ```
 
-Scenarios tagged `@agent` are excluded from automation and verified with an agent in the loop instead.
+Scenarios tagged `@agent` run against live agent sessions (real `claude` / `codex` CLI calls); they are excluded from the default run and executed on demand with `pytest -m "agent and not todo"` from a regular terminal.

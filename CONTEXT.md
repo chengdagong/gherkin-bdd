@@ -33,8 +33,12 @@ The skill that runs the installer from inside an agent session, targeting the ho
 _Avoid_: conflating it with the installer CLI itself (`bin/bdd-bootstrap`).
 
 **Agent scenario**:
-A scenario verifiable only by observing agent behavior in a live session. Tagged `@agent` in the `.feature` file, exempt from automated tests, and verified agent-in-the-loop instead.
-_Avoid_: "manual scenario", "untestable scenario".
+A scenario verifiable only by observing agent behavior in a live session. Tagged `@agent` in the `.feature` file; its automated test drives a live agent session and runs on demand, outside the default test run.
+_Avoid_: "manual scenario", "untestable scenario", "exempt scenario".
+
+**Todo scenario**:
+A scenario declared in a `.feature` file whose test cannot be built yet. Tagged `@todo` with an adjacent comment recording why and what unblocks it — tracked debt, never silently dropped.
+_Avoid_: "pending scenario", "skipped scenario".
 
 **Managed region**:
 The block in an instruction file, delimited by `<!-- gherkin-bdd:rule:start -->` / `<!-- gherkin-bdd:rule:end -->` comments, that the plugin owns and refreshes. Content inside it is overwritten on sync; edits belong in `BDD.md`.
