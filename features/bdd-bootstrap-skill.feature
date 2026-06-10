@@ -1,42 +1,41 @@
-Feature: Bootstrap skill
-  A user can set up the current project from inside an agent session by invoking
-  the bdd-bootstrap skill. The skill works out which host the session is running
-  in and runs the installer with the matching host argument.
+# language: zh-CN
+功能: 引导安装技能
+  用户可以在 agent 会话内调用 bdd-bootstrap 技能，为当前项目完成设置。
+  技能会识别会话正在运行的 host，并用匹配的 host 参数运行安装器。
 
   @agent
-  Scenario: Invoked from Claude Code
-    Given a session running in Claude Code
-    When the user invokes the bdd-bootstrap skill without naming a host
-    Then the installer runs for the claude host in the current project
+  场景: 从 Claude Code 调用
+    假如 一个运行在 Claude Code 中的会话
+    当 用户调用 bdd-bootstrap 技能但没有指定 host
+    那么 安装器为当前项目运行 claude host 安装
 
   @agent
-  Scenario: Invoked from Codex
-    Given a session running in Codex
-    When the user invokes the bdd-bootstrap skill without naming a host
-    Then the installer runs for the codex host in the current project
+  场景: 从 Codex 调用
+    假如 一个运行在 Codex 中的会话
+    当 用户调用 bdd-bootstrap 技能但没有指定 host
+    那么 安装器为当前项目运行 codex host 安装
 
   @agent
-  Scenario: The user names a host explicitly
-    Given a session running in Claude Code
-    When the user invokes the bdd-bootstrap skill naming the codex host
-    Then the installer runs for the codex host in the current project
+  场景: 用户显式指定 host
+    假如 一个运行在 Claude Code 中的会话
+    当 用户调用 bdd-bootstrap 技能并指定 codex host
+    那么 安装器为当前项目运行 codex host 安装
 
-  # TODO: not stageable yet — both shipped hosts always know their own identity,
-  # so the Given is unreachable. Unblocked when a host without reliable
-  # self-identity is supported.
+  # TODO: 目前还无法搭建该状态，因为两个已支持的 host 都能可靠识别自身身份。
+  # 当后续支持无法可靠自识别的 host 时解除阻塞。
   @agent @todo
-  Scenario: The host cannot be determined
-    Given a session whose host cannot be identified
-    When the user invokes the bdd-bootstrap skill without naming a host
-    Then the user is asked which host to install for instead of guessing
+  场景: 无法判断 host
+    假如 一个无法识别 host 的会话
+    当 用户调用 bdd-bootstrap 技能但没有指定 host
+    那么 用户被询问安装到哪个 host，而不是让系统猜测
 
   @agent
-  Scenario: The installer source is not available locally
-    Given the gherkin-bdd source repository is not present in the project
-    When the user invokes the bdd-bootstrap skill
-    Then the user is asked where their gherkin-bdd clone lives or offered a fresh clone
+  场景: 本地没有安装器源仓库
+    假如 当前项目中找不到 gherkin-bdd 源仓库
+    当 用户调用 bdd-bootstrap 技能
+    那么 用户被询问 gherkin-bdd clone 的位置，或收到重新 clone 的建议
 
-  Scenario: The bootstrap skill ships with installs
-    Given a project being set up with the gherkin-bdd installer for a host
-    When the skill is installed
-    Then the bdd-bootstrap skill is placed alongside the gherkin-bdd skill
+  场景: 安装时附带 bootstrap 技能
+    假如 正在为某个 host 安装 gherkin-bdd 的项目
+    当 技能已安装
+    那么 bdd-bootstrap 技能与 gherkin-bdd 技能安装在同一级目录

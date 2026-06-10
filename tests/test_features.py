@@ -26,6 +26,7 @@ CODEX_REF = ".agents/skills/gherkin-bdd/BDD.md"
 
 scenarios("../features/bdd-sync-check.feature")
 scenarios("../features/bdd-bootstrap-skill.feature")
+scenarios("../features/code-to-gherkin.feature")
 
 
 def load_cli():
@@ -73,25 +74,25 @@ def managed_region(text: str) -> str:
 # --- Given ------------------------------------------------------------------
 
 
-@given("a Claude Code project")
-@given("a Codex project")
-@given("a project being set up with the gherkin-bdd installer for a host")
+@given("一个 Claude Code 项目")
+@given("一个 Codex 项目")
+@given("正在为某个 host 安装 gherkin-bdd 的项目")
 def blank_project(project: Path) -> None:
     pass
 
 
-@given("a project whose CLAUDE.md already holds the user's own notes")
+@given("一个 CLAUDE.md 中已有用户笔记的项目")
 def project_with_notes(project: Path) -> None:
     (project / "CLAUDE.md").write_text("# My project\n\nSome notes.\n", encoding="utf-8")
 
 
-@given("a project whose managed region holds outdated content")
+@given("一个受管区域内容已过期的项目")
 def project_with_stale_region(project: Path) -> None:
     stale = f"# Project\n\n{MARKER_START}\nOLD STALE\n{MARKER_END}\n"
     (project / "CLAUDE.md").write_text(stale, encoding="utf-8")
 
 
-@given("a project whose managed region already holds the current reference")
+@given("一个受管区域已经包含当前引用的项目")
 def project_with_current_region(project: Path, ctx: dict) -> None:
     run_sync(project, "claude", CLAUDE_REF)
     ctx["before"] = (project / "CLAUDE.md").read_text(encoding="utf-8")
@@ -100,19 +101,19 @@ def project_with_current_region(project: Path, ctx: dict) -> None:
 # --- When -------------------------------------------------------------------
 
 
-@when(parsers.parse("the BDD sync runs for the {host} host"))
+@when(parsers.parse("为 {host} host 运行 BDD 同步"))
 def sync_for_host(project: Path, ctx: dict, host: str) -> None:
     bdd_ref = CLAUDE_REF if host == "claude" else CODEX_REF
     ctx["stdout"] = run_sync(project, host, bdd_ref)
 
 
-@when("the BDD sync runs")
+@when("运行 BDD 同步")
 def sync_default(project: Path, ctx: dict) -> None:
     ctx["stdout"] = run_sync(project, "claude", CLAUDE_REF)
 
 
-@when("the skill is installed")
-@when("the skill is installed again")
+@when("技能已安装")
+@when("技能再次安装")
 def install_claude(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(project)
     assert load_cli().main(["claude"]) == 0
@@ -121,13 +122,13 @@ def install_claude(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 # --- Then: sync -------------------------------------------------------------
 
 
-@then("CLAUDE.md contains an @-import of BDD.md inside the managed region")
+@then("CLAUDE.md 的受管区域包含对 BDD.md 的 @ 导入")
 def claude_has_import(project: Path) -> None:
     text = (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert f"@{CLAUDE_REF}" in managed_region(text)
 
 
-@then("AGENTS.md requires the agent to read BDD.md inside the managed region")
+@then("AGENTS.md 在受管区域中要求 agent 读取 BDD.md")
 def agents_has_directive(project: Path) -> None:
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     region = managed_region(text)
@@ -135,17 +136,17 @@ def agents_has_directive(project: Path) -> None:
     assert CODEX_REF in region
 
 
-@then("no AGENTS.md is created")
+@then("没有创建 AGENTS.md")
 def no_agents_md(project: Path) -> None:
     assert not (project / "AGENTS.md").exists()
 
 
-@then("no CLAUDE.md is created")
+@then("没有创建 CLAUDE.md")
 def no_claude_md(project: Path) -> None:
     assert not (project / "CLAUDE.md").exists()
 
 
-@then("the managed region is added and the user's notes are left intact")
+@then("受管区域被加入且用户笔记保持不变")
 def notes_intact(project: Path) -> None:
     text = (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert "# My project" in text
@@ -153,7 +154,7 @@ def notes_intact(project: Path) -> None:
     assert f"@{CLAUDE_REF}" in managed_region(text)
 
 
-@then("the managed region is rewritten from the current reference")
+@then("受管区域被当前引用重写")
 def region_refreshed(project: Path) -> None:
     text = (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert "OLD STALE" not in text
@@ -161,13 +162,13 @@ def region_refreshed(project: Path) -> None:
     assert f"@{CLAUDE_REF}" in managed_region(text)
 
 
-@then("it appears exactly once")
+@then("它只出现一次")
 def region_appears_once(project: Path) -> None:
     text = (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert text.count(MARKER_START) == 1
 
 
-@then("the instruction file is left unchanged")
+@then("指令文件保持不变")
 def file_unchanged(project: Path, ctx: dict) -> None:
     assert ctx["stdout"].strip() == ""
     assert (project / "CLAUDE.md").read_text(encoding="utf-8") == ctx["before"]
@@ -176,29 +177,38 @@ def file_unchanged(project: Path, ctx: dict) -> None:
 # --- Then: install ----------------------------------------------------------
 
 
-@then("the skill, the BDD rule, and the sync script are placed in the host's project skills directory")
+@then("技能、BDD 规则和技能脚本被放入 host 的项目技能目录")
 def skill_layout(project: Path) -> None:
     skill_dir = project / ".claude" / "skills" / "gherkin-bdd"
     assert (skill_dir / "SKILL.md").exists()
     assert (skill_dir / "BDD.md").exists()
     assert (skill_dir / "scripts" / "check_bdd_sync.py").exists()
+    assert (skill_dir / "scripts" / "gherkin_to_html.py").exists()
     assert sorted(p.name for p in skill_dir.iterdir()) == ["BDD.md", "SKILL.md", "scripts"]
+    assert sorted(p.name for p in (skill_dir / "scripts").iterdir()) == [
+        "check_bdd_sync.py",
+        "gherkin_to_html.py",
+    ]
 
 
-@then("nothing else is added to the project")
+@then("项目中没有新增其他内容")
 def nothing_else(project: Path) -> None:
     assert sorted(p.name for p in project.iterdir()) == [".claude", "CLAUDE.md"]
     skills = project / ".claude" / "skills"
-    assert sorted(p.name for p in skills.iterdir()) == ["bdd-bootstrap", "gherkin-bdd"]
+    assert sorted(p.name for p in skills.iterdir()) == [
+        "bdd-bootstrap",
+        "code-to-gherkin",
+        "gherkin-bdd",
+    ]
 
 
-@then("the host's canonical instruction file references BDD.md")
+@then("host 的规范指令文件引用 BDD.md")
 def canonical_references_rule(project: Path) -> None:
     text = (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert f"@{CLAUDE_REF}" in managed_region(text)
 
 
-@then("a session-start hook is registered to run the same sync script later")
+@then("注册了一个稍后运行同一同步脚本的 session-start hook")
 def hook_registered(project: Path) -> None:
     settings = json.loads((project / ".claude" / "settings.json").read_text(encoding="utf-8"))
     command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
@@ -207,7 +217,7 @@ def hook_registered(project: Path) -> None:
     assert f'--bdd-ref "{CLAUDE_REF}"' in command
 
 
-@then("only one session-start hook entry and one managed region exist")
+@then("只存在一个 session-start hook 条目和一个受管区域")
 def install_idempotent(project: Path) -> None:
     settings = json.loads((project / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert len(settings["hooks"]["SessionStart"]) == 1
@@ -215,11 +225,18 @@ def install_idempotent(project: Path) -> None:
     assert text.count(MARKER_START) == 1
 
 
-@then("the bdd-bootstrap skill is placed alongside the gherkin-bdd skill")
+@then("bdd-bootstrap 技能与 gherkin-bdd 技能安装在同一级目录")
 def bootstrap_skill_installed(project: Path) -> None:
     bootstrap_dir = project / ".claude" / "skills" / "bdd-bootstrap"
     assert (bootstrap_dir / "SKILL.md").exists()
     assert [p.name for p in bootstrap_dir.iterdir()] == ["SKILL.md"]
+
+
+@then("code-to-gherkin 技能与 gherkin-bdd 技能安装在同一级目录")
+def code_to_gherkin_skill_installed(project: Path) -> None:
+    skill_dir = project / ".claude" / "skills" / "code-to-gherkin"
+    assert (skill_dir / "SKILL.md").exists()
+    assert [p.name for p in skill_dir.iterdir()] == ["SKILL.md"]
 
 
 # --- Spec hygiene -------------------------------------------------------------
@@ -265,6 +282,7 @@ def test_codex_install_targets_codex_locations(
     assert load_cli().main(["codex"]) == 0
     assert (tmp_path / ".agents" / "skills" / "gherkin-bdd" / "SKILL.md").exists()
     assert (tmp_path / ".agents" / "skills" / "bdd-bootstrap" / "SKILL.md").exists()
+    assert (tmp_path / ".agents" / "skills" / "code-to-gherkin" / "SKILL.md").exists()
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
     command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
     assert "--host codex" in command

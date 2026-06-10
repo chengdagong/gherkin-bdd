@@ -6,8 +6,10 @@ Usage:
     bdd-bootstrap claude    # install for Claude Code + register its hook
     bdd-bootstrap codex     # install for Codex + register its hook
 
-What gets installed: the skill (SKILL.md), the BDD rule (BDD.md), the sync
-script, and a SessionStart hook — nothing else. The skill goes into the host's
+What gets installed: the gherkin-bdd skill (SKILL.md, the BDD rule BDD.md, and
+the skill's scripts — the BDD-rule sync and the gherkin-to-html converter), the
+companion skills (bdd-bootstrap, code-to-gherkin; one SKILL.md each), and a
+SessionStart hook — nothing else. The skill goes into the host's
 project-level skills directory (.claude/skills/ or .agents/skills/), which both
 hosts discover natively; there is no plugin packaging or marketplace
 registration. The source is the repository that ships this script; the install
@@ -25,6 +27,8 @@ from pathlib import Path
 
 SKILL_NAME = "gherkin-bdd"
 BOOTSTRAP_SKILL_NAME = "bdd-bootstrap"
+CODE_TO_GHERKIN_SKILL_NAME = "code-to-gherkin"
+COMPANION_SKILL_NAMES = (BOOTSTRAP_SKILL_NAME, CODE_TO_GHERKIN_SKILL_NAME)
 SESSION_HOOK_MATCHER = "startup|resume"
 SESSION_HOOK_MARKER = "check_bdd_sync.py"
 SESSION_HOOK_STATUS = "Syncing BDD rule"
@@ -62,9 +66,10 @@ def install(project_dir: Path, host: str) -> None:
     skill_dir = skills_root / SKILL_NAME
     print(f"Skill target: {skill_dir}")
     install_skill(skill_dir)
-    bootstrap_dir = skills_root / BOOTSTRAP_SKILL_NAME
-    print(f"Skill target: {bootstrap_dir}")
-    install_bootstrap_skill(bootstrap_dir)
+    for name in COMPANION_SKILL_NAMES:
+        companion_dir = skills_root / name
+        print(f"Skill target: {companion_dir}")
+        install_companion_skill(companion_dir, name)
 
     skill_ref = f"{HOST_SKILL_DIRS[host]}/{SKILL_NAME}"
     bdd_ref = f"{skill_ref}/BDD.md"
@@ -85,8 +90,9 @@ def install(project_dir: Path, host: str) -> None:
 def validate_source() -> None:
     required = (
         SOURCE / "skills" / SKILL_NAME / "SKILL.md",
-        SOURCE / "skills" / BOOTSTRAP_SKILL_NAME / "SKILL.md",
+        *(SOURCE / "skills" / name / "SKILL.md" for name in COMPANION_SKILL_NAMES),
         SOURCE / "scripts" / "check_bdd_sync.py",
+        SOURCE / "scripts" / "gherkin_to_html.py",
         SOURCE / "BDD.md",
     )
     missing = [str(path) for path in required if not path.exists()]
@@ -102,11 +108,15 @@ def install_skill(skill_dir: Path) -> None:
         SOURCE / "scripts" / "check_bdd_sync.py",
         skill_dir / "scripts" / "check_bdd_sync.py",
     )
+    copy_path(
+        SOURCE / "scripts" / "gherkin_to_html.py",
+        skill_dir / "scripts" / "gherkin_to_html.py",
+    )
 
 
-def install_bootstrap_skill(skill_dir: Path) -> None:
+def install_companion_skill(skill_dir: Path, name: str) -> None:
     reset_dir(skill_dir)
-    copy_path(SOURCE / "skills" / BOOTSTRAP_SKILL_NAME / "SKILL.md", skill_dir / "SKILL.md")
+    copy_path(SOURCE / "skills" / name / "SKILL.md", skill_dir / "SKILL.md")
 
 
 def reset_dir(path: Path) -> None:

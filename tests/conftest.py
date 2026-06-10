@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 from pytest_bdd import given, then, when
@@ -142,7 +143,7 @@ def bootstrap(source: Path, project: Path, host: str) -> None:
 # --- Given: effect probes -----------------------------------------------------
 
 
-@given("an installed Claude Code project whose rule copy contains a canary line")
+@given("已安装的 Claude Code 项目，它的规则副本包含一行 canary")
 def installed_claude_project(live: dict) -> None:
     live["source"] = make_source_copy(live["tmp"], canary=CANARY_V1)
     live["project"] = live["tmp"] / "project"
@@ -150,7 +151,7 @@ def installed_claude_project(live: dict) -> None:
     bootstrap(live["source"], live["project"], "claude")
 
 
-@given("an installed Codex project whose rule copy contains a canary line")
+@given("已安装的 Codex 项目，它的规则副本包含一行 canary")
 def installed_codex_project(live: dict) -> None:
     live["source"] = make_source_copy(live["tmp"], canary=CANARY_V1)
     live["project"] = live["tmp"] / "project"
@@ -158,13 +159,13 @@ def installed_codex_project(live: dict) -> None:
     bootstrap(live["source"], live["project"], "codex")
 
 
-@given("the source rule's canary has since changed")
+@given("源规则中的 canary 已经改变")
 def source_canary_changed(live: dict) -> None:
     bdd = live["source"] / "BDD.md"
     bdd.write_text(bdd.read_text(encoding="utf-8").replace(CANARY_V1, CANARY_V2), encoding="utf-8")
 
 
-@given("the installer is re-run in the project")
+@given("在项目中重新运行安装器")
 def reinstall(live: dict) -> None:
     bootstrap(live["source"], live["project"], "claude")
 
@@ -187,17 +188,17 @@ def stage_source_as_project(live: dict, host: str) -> None:
     live["project"] = project
 
 
-@given("a session running in Claude Code")
+@given("一个运行在 Claude Code 中的会话")
 def claude_session(live: dict) -> None:
     stage_source_as_project(live, "claude")
 
 
-@given("a session running in Codex")
+@given("一个运行在 Codex 中的会话")
 def codex_session(live: dict) -> None:
     stage_source_as_project(live, "codex")
 
 
-@given("the gherkin-bdd source repository is not present in the project")
+@given("当前项目中找不到 gherkin-bdd 源仓库")
 def no_source_repo(live: dict) -> None:
     project = live["tmp"] / "project"
     project.mkdir()
@@ -211,17 +212,17 @@ def no_source_repo(live: dict) -> None:
 # --- When -----------------------------------------------------------------------
 
 
-@when("a headless Claude session is asked for the canary without tool access")
+@when("无工具权限的 headless Claude 会话被询问 canary")
 def probe_claude(live: dict) -> None:
     live["stdout"] = run_claude(live["project"], CANARY_PROBE, mode="none")
 
 
-@when("a headless Codex session is asked to report the canary from its required reading")
+@when("headless Codex 会话被要求从必读规则中报告 canary")
 def probe_codex(live: dict) -> None:
     live["stdout"] = run_codex(live["project"], CODEX_PROBE, writes=False)
 
 
-@when("the user invokes the bdd-bootstrap skill without naming a host")
+@when("用户调用 bdd-bootstrap 技能但没有指定 host")
 def invoke_skill(live: dict) -> None:
     if live["host"] == "claude":
         live["stdout"] = run_claude(live["project"], "/bdd-bootstrap", mode="full")
@@ -233,12 +234,12 @@ def invoke_skill(live: dict) -> None:
         )
 
 
-@when("the user invokes the bdd-bootstrap skill naming the codex host")
+@when("用户调用 bdd-bootstrap 技能并指定 codex host")
 def invoke_skill_naming_codex(live: dict) -> None:
     live["stdout"] = run_claude(live["project"], "/bdd-bootstrap codex", mode="full")
 
 
-@when("the user invokes the bdd-bootstrap skill")
+@when("用户调用 bdd-bootstrap 技能")
 def invoke_skill_plain(live: dict) -> None:
     # Used by the no-source scenario: permissions stay gated so the agent
     # cannot self-serve (e.g. clone from GitHub) — asking is its only move.
@@ -248,23 +249,23 @@ def invoke_skill_plain(live: dict) -> None:
 # --- Then -------------------------------------------------------------------------
 
 
-@then("the canary line is returned")
+@then("返回 canary 行")
 def canary_returned(live: dict) -> None:
     assert CANARY_V1 in live["stdout"], live["stdout"]
 
 
-@then("the original canary line is returned, not the updated one")
+@then("返回原始 canary 行，而不是更新后的 canary 行")
 def original_canary_returned(live: dict) -> None:
     assert CANARY_V1 in live["stdout"], live["stdout"]
     assert CANARY_V2 not in live["stdout"], live["stdout"]
 
 
-@then("the updated canary line is returned")
+@then("返回更新后的 canary 行")
 def updated_canary_returned(live: dict) -> None:
     assert CANARY_V2 in live["stdout"], live["stdout"]
 
 
-@then("the installer runs for the claude host in the current project")
+@then("安装器为当前项目运行 claude host 安装")
 def claude_install_happened(live: dict) -> None:
     project = live["project"]
     settings_path = project / ".claude" / "settings.json"
@@ -276,7 +277,7 @@ def claude_install_happened(live: dict) -> None:
     assert MARKER_START in (project / "CLAUDE.md").read_text(encoding="utf-8")
 
 
-@then("the installer runs for the codex host in the current project")
+@then("安装器为当前项目运行 codex host 安装")
 def codex_install_happened(live: dict) -> None:
     project = live["project"]
     hooks_path = project / ".codex" / "hooks.json"
@@ -288,9 +289,184 @@ def codex_install_happened(live: dict) -> None:
     assert MARKER_START in (project / "AGENTS.md").read_text(encoding="utf-8")
 
 
-@then("the user is asked where their gherkin-bdd clone lives or offered a fresh clone")
+@then("用户被询问 gherkin-bdd clone 的位置，或收到重新 clone 的建议")
 def asked_for_source(live: dict) -> None:
     project = live["project"]
     assert not (project / ".claude" / "settings.json").exists(), "installer ran without a source"
     output = live["stdout"].lower()
     assert any(token in output for token in ("clone", "github", "path")), live["stdout"]
+
+
+# --- code-to-gherkin: staging ---------------------------------------------------
+
+TIPCALC_PY = dedent(
+    '''
+    """Split a restaurant bill evenly."""
+    import sys
+
+
+    def _fmt_currency_v2(amount):
+        return f"${amount:.2f}"
+
+
+    def split_bill(total, people):
+        return total / people
+
+
+    def main():
+        total, people = float(sys.argv[1]), int(sys.argv[2])
+        print(f"Each person pays {_fmt_currency_v2(split_bill(total, people))}")
+
+
+    if __name__ == "__main__":
+        main()
+    '''
+).lstrip()
+
+GREETER_PY = dedent(
+    '''
+    """Greet or bid farewell to someone by name."""
+    import sys
+
+
+    def main():
+        action, name = sys.argv[1], sys.argv[2]
+        if action == "greet":
+            print(f"Hello, {name}!")
+        elif action == "farewell":
+            print(f"Goodbye, {name}.")
+
+
+    if __name__ == "__main__":
+        main()
+    '''
+).lstrip()
+
+GREETING_FEATURE = dedent(
+    """
+    Feature: Greeting
+      Scenario: Greet someone by name
+        Given the name "Ada"
+        When the user asks for a greeting
+        Then "Hello, Ada!" is printed
+    """
+).lstrip()
+
+DISCOUNT_PY = dedent(
+    '''
+    """Checkout pricing: every order gets the advertised 10% discount."""
+    import sys
+
+
+    def discounted_total(total):
+        # apply the 10% discount
+        return round(total * 1.10, 2)
+
+
+    def main():
+        print(f"Total after discount: {discounted_total(float(sys.argv[1]))}")
+
+
+    if __name__ == "__main__":
+        main()
+    '''
+).lstrip()
+
+
+def stage_code_project(live: dict, files: dict[str, str]) -> None:
+    """A bootstrapped Claude project holding application code to backfill."""
+    project = live["tmp"] / "project"
+    project.mkdir()
+    bootstrap(ROOT, project, "claude")
+    for relative, text in files.items():
+        path = project / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    live["host"] = "claude"
+    live["project"] = project
+
+
+def project_feature_texts(project: Path) -> dict[str, str]:
+    """All Gherkin files in the project, outside install directories."""
+    return {
+        path.relative_to(project).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(project.rglob("*.feature"))
+        if not any(part in (".claude", ".agents") for part in path.parts)
+    }
+
+
+# --- code-to-gherkin: steps -------------------------------------------------------
+
+
+@given("一个有可运行代码但没有 Gherkin 文件的项目")
+def code_project_uncovered(live: dict) -> None:
+    stage_code_project(live, {"tipcalc.py": TIPCALC_PY})
+
+
+@given("一个部分行为已经由 Gherkin 文件描述的项目")
+def code_project_partially_covered(live: dict) -> None:
+    stage_code_project(
+        live,
+        {"greeter.py": GREETER_PY, "features/greeting.feature": GREETING_FEATURE},
+    )
+
+
+@given("一个代码中包含疑似缺陷的项目")
+def code_project_with_defect(live: dict) -> None:
+    stage_code_project(live, {"discount.py": DISCOUNT_PY})
+
+
+@when("用户调用 code-to-gherkin 技能")
+def invoke_code_to_gherkin(live: dict) -> None:
+    live["stdout"] = run_claude(live["project"], "/code-to-gherkin", mode="full")
+
+
+@then("描述代码用户可见行为的 Gherkin 文件被创建")
+def behavior_recorded(live: dict) -> None:
+    texts = project_feature_texts(live["project"])
+    assert texts, f"no Gherkin files created; session said:\n{live['stdout'][-2000:]}"
+    combined = "\n".join(texts.values()).lower()
+    assert "bill" in combined or "split" in combined, combined
+
+
+@then("未覆盖的行为获得场景")
+def uncovered_behavior_gains_scenarios(live: dict) -> None:
+    combined = "\n".join(project_feature_texts(live["project"]).values()).lower()
+    assert "farewell" in combined or "goodbye" in combined, combined
+
+
+@then("已覆盖的行为不会被描述两次")
+def covered_behavior_not_duplicated(live: dict) -> None:
+    combined = "\n".join(project_feature_texts(live["project"]).values())
+    assert combined.count("Greet someone by name") == 1, combined
+
+
+@then("新场景描述用户可以观察到的结果")
+def scenarios_describe_observables(live: dict) -> None:
+    texts = project_feature_texts(live["project"])
+    assert texts, f"no Gherkin files created; session said:\n{live['stdout'][-2000:]}"
+    combined = "\n".join(texts.values())
+    assert "Scenario:" in combined and "Then" in combined, combined
+    assert "pay" in combined.lower() or "$" in combined, combined
+
+
+@then("内部代码名不会出现在 Gherkin 文件中")
+def internal_names_stay_out(live: dict) -> None:
+    combined = "\n".join(project_feature_texts(live["project"]).values())
+    for name in ("_fmt_currency_v2", "split_bill"):
+        assert name not in combined, f"implementation name {name!r} leaked:\n{combined}"
+
+
+@then("用户会被询问该行为是否符合预期")
+def asked_about_defect(live: dict) -> None:
+    output = live["stdout"].lower()
+    assert "discount" in output, live["stdout"][-2000:]
+    assert any(
+        token in output for token in ("intended", "intentional", "bug", "defect", "expect", "?")
+    ), live["stdout"][-2000:]
+
+
+@then("没有场景把缺陷结果记录成预期行为")
+def defect_not_specified(live: dict) -> None:
+    combined = "\n".join(project_feature_texts(live["project"]).values())
+    assert "110" not in combined, f"the defective outcome was specced:\n{combined}"

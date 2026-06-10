@@ -1,32 +1,32 @@
-Feature: BDD rule effect
-  Installing the plugin must actually deliver the BDD rule into agent sessions:
-  Claude Code auto-loads it through the CLAUDE.md import, Codex reads it when
-  AGENTS.md directs it to, and a project's installed copy stays frozen until the
-  installer is re-run.
+# language: zh-CN
+功能: BDD 规则生效
+  安装插件必须真的把 BDD 规则带进 agent 会话：Claude Code 通过
+  CLAUDE.md 导入自动加载规则，Codex 在 AGENTS.md 指令要求下读取规则，
+  项目中的已安装副本会保持冻结，直到重新运行安装器。
 
   @agent
-  Scenario: Claude Code auto-loads the rule through the import
-    Given an installed Claude Code project whose rule copy contains a canary line
-    When a headless Claude session is asked for the canary without tool access
-    Then the canary line is returned
+  场景: Claude Code 通过导入自动加载规则
+    假如 已安装的 Claude Code 项目，它的规则副本包含一行 canary
+    当 无工具权限的 headless Claude 会话被询问 canary
+    那么 返回 canary 行
 
   @agent
-  Scenario: Codex reads the rule the directive points at
-    Given an installed Codex project whose rule copy contains a canary line
-    When a headless Codex session is asked to report the canary from its required reading
-    Then the canary line is returned
+  场景: Codex 读取指令指向的规则
+    假如 已安装的 Codex 项目，它的规则副本包含一行 canary
+    当 headless Codex 会话被要求从必读规则中报告 canary
+    那么 返回 canary 行
 
   @agent
-  Scenario: A source update is invisible until re-install
-    Given an installed Claude Code project whose rule copy contains a canary line
-    And the source rule's canary has since changed
-    When a headless Claude session is asked for the canary without tool access
-    Then the original canary line is returned, not the updated one
+  场景: 源规则更新在重新安装前不可见
+    假如 已安装的 Claude Code 项目，它的规则副本包含一行 canary
+    而且 源规则中的 canary 已经改变
+    当 无工具权限的 headless Claude 会话被询问 canary
+    那么 返回原始 canary 行，而不是更新后的 canary 行
 
   @agent
-  Scenario: Re-installing delivers the updated rule
-    Given an installed Claude Code project whose rule copy contains a canary line
-    And the source rule's canary has since changed
-    And the installer is re-run in the project
-    When a headless Claude session is asked for the canary without tool access
-    Then the updated canary line is returned
+  场景: 重新安装会带入更新后的规则
+    假如 已安装的 Claude Code 项目，它的规则副本包含一行 canary
+    而且 源规则中的 canary 已经改变
+    而且 在项目中重新运行安装器
+    当 无工具权限的 headless Claude 会话被询问 canary
+    那么 返回更新后的 canary 行

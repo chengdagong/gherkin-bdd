@@ -8,8 +8,10 @@ What ships:
 
 - `skills/gherkin-bdd/SKILL.md` — the Gherkin BDD workflow (drafting, reviewing, and implementing behavior specs)
 - `skills/bdd-bootstrap/SKILL.md` — a skill that runs the installer for whichever host the session is running in
+- `skills/code-to-gherkin/SKILL.md` — a skill that reads the code and backfills `.feature` coverage for behavior no Gherkin file describes yet
 - `BDD.md` — the BDD rule text, the single source of truth
 - `scripts/check_bdd_sync.py` — keeps a reference to the rule in each host's instruction file
+- `scripts/gherkin_to_html.py` — renders every `.feature` file in the project, as it is, into one easy-to-read HTML page
 - `bin/bdd-bootstrap` — the per-project installer
 
 There is no plugin packaging: both hosts discover project-level skills natively, so the installer just lays files down and registers one hook.
@@ -46,11 +48,23 @@ The CLI only supports project-level installation. It does not write to `~/.claud
 
 A single script, `scripts/check_bdd_sync.py`, owns this. The installer runs it once (feeding it the same JSON payload a hook would), and a `SessionStart` hook runs the **same** script on every session start/resume. It creates the canonical file if absent, refreshes the managed region, and does nothing once the reference is current (idempotent). It never blocks the session. Claude Code only loads hooks from `settings.json`, not from a skill directory, which is why the hook lives in `.claude/settings.json`.
 
+## Gherkin to HTML
+
+The skill ships a converter that renders every `.feature` file in the project — as it is, nothing summarized or left out — into one easy-to-read, searchable HTML page, so anyone can read what the application does without opening individual files:
+
+```bash
+python3 .claude/skills/gherkin-bdd/scripts/gherkin_to_html.py   # or .agents/skills/... for Codex
+```
+
+It writes `docs/gherkin.html` by default, creating `docs/` when needed (override with `--out`). The output is a single self-contained Gherkin Reader page with Gherkin file tabs, scenario counts, tag badges, collapsible scenarios, Given/When/Then phase spacing, polished data tables, search/filtering, Chinese/English UI labels and displayed Gherkin keywords, and three local themes. It currently supports English Gherkin files and Simplified Chinese files that declare `# language: zh-CN`; other localized Gherkin languages are outside the current support scope. The display language can localize keywords without rewriting the source files. It works offline, with no server and no external assets. Dependency and hidden directories are skipped, and a file that does not parse as Gherkin is still listed as plain text with a parse warning. In a session, just ask the agent to render the gherkin to HTML — the skill knows how.
+
 ## Using the skills
 
 In Claude Code, run `/gherkin-bdd` (or just describe Gherkin work — the skill description triggers it). Codex lists project skills automatically and loads the skill when a task matches. After re-installing, restart the session (Claude Code: or run `/reload-plugins`).
 
 `/bdd-bootstrap` re-runs the installer for the current project from inside a session: it detects whether it is running in Claude Code or Codex and passes the matching host argument. Name a host explicitly (`/bdd-bootstrap codex`) to install for the other host.
+
+`/code-to-gherkin` makes an existing codebase BDD-driven: it reads the code, finds user-facing behavior that no `.feature` file describes yet, and records it as Gherkin scenarios — capture of what the code does today, never invention. Suspicious behavior becomes a question to you, not a silent spec; backfilled scenarios get characterization tests that must pass against the current code. It works with partial or zero existing coverage and is safe to re-run. Converting a non-BDD project is the composition: `/bdd-bootstrap`, then `/code-to-gherkin`.
 
 ## Developing this repo
 

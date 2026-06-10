@@ -152,7 +152,7 @@ def emit_notice(changed: list[str]) -> None:
             "hookEventName": "SessionStart",
             "additionalContext": (
                 f"{names} now references the BDD rule in BDD.md. Every user-facing "
-                "feature must have a matching .feature file as the source of truth "
+                "feature must have a matching Gherkin file as the source of truth "
                 "for its behavior."
             ),
         },
