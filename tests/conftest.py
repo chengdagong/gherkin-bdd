@@ -1,6 +1,6 @@
 """Shared fixtures and live (@agent) step definitions.
 
-The @agent steps drive real headless host sessions (`claude -p`, `codex exec`).
+The @agent steps drive real headless coding-agent sessions (`claude -p`, `codex exec`).
 They run on demand — `.venv/bin/pytest -m "agent and not todo"` — from a normal
 terminal where both CLIs are installed and logged in. Each probe runs once and
 must pass, per BDD.md. A missing CLI skips (environment gap, not a failure).
@@ -60,7 +60,7 @@ def require_cli(name: str) -> None:
 
 
 def clean_env() -> dict:
-    """Drop parent-session variables that break nested host CLIs."""
+    """Drop parent-session variables that break nested coding-agent CLIs."""
     env = os.environ.copy()
     for var in (
         "ANTHROPIC_BASE_URL",
@@ -130,9 +130,9 @@ def make_source_copy(into: Path, canary: str | None = None) -> Path:
     return source
 
 
-def bootstrap(source: Path, project: Path, host: str) -> None:
+def bootstrap(source: Path, project: Path, coding_agent: str) -> None:
     result = subprocess.run(
-        [sys.executable, str(source / "bin" / "bdd-bootstrap"), host],
+        [sys.executable, str(source / "bin" / "bdd-bootstrap"), coding_agent],
         cwd=project,
         capture_output=True,
         text=True,
@@ -173,18 +173,18 @@ def reinstall(live: dict) -> None:
 # --- Given: bootstrap-skill staging --------------------------------------------
 
 
-def stage_source_as_project(live: dict, host: str) -> None:
-    """The project IS a source copy, self-installed, with the host's sync
+def stage_source_as_project(live: dict, coding_agent: str) -> None:
+    """The project IS a source copy, self-installed, with the coding agent's sync
     artifacts removed so the skill invocation leaves an observable delta."""
     project = make_source_copy(live["tmp"])
-    bootstrap(project, project, host)
-    if host == "claude":
+    bootstrap(project, project, coding_agent)
+    if coding_agent == "claude":
         (project / ".claude" / "settings.json").unlink()
         (project / "CLAUDE.md").unlink()
     else:
         (project / ".codex" / "hooks.json").unlink()
         (project / "AGENTS.md").unlink()
-    live["host"] = host
+    live["coding_agent"] = coding_agent
     live["project"] = project
 
 
@@ -205,7 +205,7 @@ def no_source_repo(live: dict) -> None:
     bootstrap(ROOT, project, "claude")
     (project / ".claude" / "settings.json").unlink()
     (project / "CLAUDE.md").unlink()
-    live["host"] = "claude"
+    live["coding_agent"] = "claude"
     live["project"] = project
 
 
@@ -222,9 +222,9 @@ def probe_codex(live: dict) -> None:
     live["stdout"] = run_codex(live["project"], CODEX_PROBE, writes=False)
 
 
-@when("用户调用 bdd-bootstrap 技能但没有指定 host")
+@when("用户调用 bdd-bootstrap 技能但没有指定 coding agent")
 def invoke_skill(live: dict) -> None:
-    if live["host"] == "claude":
+    if live["coding_agent"] == "claude":
         live["stdout"] = run_claude(live["project"], "/bdd-bootstrap", mode="full")
     else:
         live["stdout"] = run_codex(
@@ -234,7 +234,7 @@ def invoke_skill(live: dict) -> None:
         )
 
 
-@when("用户调用 bdd-bootstrap 技能并指定 codex host")
+@when("用户调用 bdd-bootstrap 技能并指定 Codex")
 def invoke_skill_naming_codex(live: dict) -> None:
     live["stdout"] = run_claude(live["project"], "/bdd-bootstrap codex", mode="full")
 
@@ -265,7 +265,7 @@ def updated_canary_returned(live: dict) -> None:
     assert CANARY_V2 in live["stdout"], live["stdout"]
 
 
-@then("安装器为当前项目运行 claude host 安装")
+@then("安装器为当前项目运行 Claude Code 安装")
 def claude_install_happened(live: dict) -> None:
     project = live["project"]
     settings_path = project / ".claude" / "settings.json"
@@ -277,7 +277,7 @@ def claude_install_happened(live: dict) -> None:
     assert MARKER_START in (project / "CLAUDE.md").read_text(encoding="utf-8")
 
 
-@then("安装器为当前项目运行 codex host 安装")
+@then("安装器为当前项目运行 Codex 安装")
 def codex_install_happened(live: dict) -> None:
     project = live["project"]
     hooks_path = project / ".codex" / "hooks.json"
@@ -382,7 +382,7 @@ def stage_code_project(live: dict, files: dict[str, str]) -> None:
         path = project / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
-    live["host"] = "claude"
+    live["coding_agent"] = "claude"
     live["project"] = project
 
 

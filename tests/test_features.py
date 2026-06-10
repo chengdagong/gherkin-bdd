@@ -53,9 +53,9 @@ def ctx() -> dict:
     return {}
 
 
-def run_sync(project: Path, host: str, bdd_ref: str) -> str:
+def run_sync(project: Path, coding_agent: str, bdd_ref: str) -> str:
     result = subprocess.run(
-        [sys.executable, str(CHECK_SCRIPT), "--host", host, "--bdd-ref", bdd_ref],
+        [sys.executable, str(CHECK_SCRIPT), "--coding-agent", coding_agent, "--bdd-ref", bdd_ref],
         input=json.dumps(
             {"cwd": str(project), "hook_event_name": "SessionStart", "source": "startup"}
         ),
@@ -76,7 +76,7 @@ def managed_region(text: str) -> str:
 
 @given("一个 Claude Code 项目")
 @given("一个 Codex 项目")
-@given("正在为某个 host 安装 gherkin-bdd 的项目")
+@given("正在为某个 coding agent 安装 gherkin-bdd 的项目")
 def blank_project(project: Path) -> None:
     pass
 
@@ -101,10 +101,11 @@ def project_with_current_region(project: Path, ctx: dict) -> None:
 # --- When -------------------------------------------------------------------
 
 
-@when(parsers.parse("为 {host} host 运行 BDD 同步"))
-def sync_for_host(project: Path, ctx: dict, host: str) -> None:
-    bdd_ref = CLAUDE_REF if host == "claude" else CODEX_REF
-    ctx["stdout"] = run_sync(project, host, bdd_ref)
+@when(parsers.parse("为 {coding_agent_name} 运行 BDD 同步"))
+def sync_for_coding_agent(project: Path, ctx: dict, coding_agent_name: str) -> None:
+    coding_agent = "claude" if coding_agent_name == "Claude Code" else "codex"
+    bdd_ref = CLAUDE_REF if coding_agent == "claude" else CODEX_REF
+    ctx["stdout"] = run_sync(project, coding_agent, bdd_ref)
 
 
 @when("运行 BDD 同步")
@@ -177,7 +178,7 @@ def file_unchanged(project: Path, ctx: dict) -> None:
 # --- Then: install ----------------------------------------------------------
 
 
-@then("技能、BDD 规则和技能脚本被放入 host 的项目技能目录")
+@then("技能、BDD 规则和技能脚本被放入 coding agent 的项目技能目录")
 def skill_layout(project: Path) -> None:
     skill_dir = project / ".claude" / "skills" / "gherkin-bdd"
     assert (skill_dir / "SKILL.md").exists()
@@ -202,7 +203,7 @@ def nothing_else(project: Path) -> None:
     ]
 
 
-@then("host 的规范指令文件引用 BDD.md")
+@then("coding agent 的规范指令文件引用 BDD.md")
 def canonical_references_rule(project: Path) -> None:
     text = (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert f"@{CLAUDE_REF}" in managed_region(text)
@@ -213,7 +214,7 @@ def hook_registered(project: Path) -> None:
     settings = json.loads((project / ".claude" / "settings.json").read_text(encoding="utf-8"))
     command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
     assert "check_bdd_sync.py" in command
-    assert "--host claude" in command
+    assert "--coding-agent claude" in command
     assert f'--bdd-ref "{CLAUDE_REF}"' in command
 
 
@@ -269,7 +270,7 @@ def test_every_todo_scenario_records_its_debt() -> None:
 # --- Regression guards not tied to a scenario --------------------------------
 
 
-def test_invalid_host_exits(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_invalid_coding_agent_exits(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         load_cli().main(["github"])
@@ -285,7 +286,7 @@ def test_codex_install_targets_codex_locations(
     assert (tmp_path / ".agents" / "skills" / "code-to-gherkin" / "SKILL.md").exists()
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
     command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-    assert "--host codex" in command
+    assert "--coding-agent codex" in command
     assert f'--bdd-ref "{CODEX_REF}"' in command
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert "MUST read" in text

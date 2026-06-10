@@ -56,7 +56,7 @@ pytest-bdd subprocess steps.
   correctness remain the job of the project's tests.
 - The reader parser is deliberately smaller than the official Gherkin grammar.
   Expanding language or syntax support is acceptable when it improves reading,
-  but conformance belongs to pytest-bdd, Cucumber, or the host project's chosen
+  but conformance belongs to pytest-bdd, Cucumber, or the installed project's chosen
   Gherkin runner.
 - An agent can render the page and hand it over (e.g. attach it to a session)
   without any user interaction, which a pick-a-folder viewer could not do

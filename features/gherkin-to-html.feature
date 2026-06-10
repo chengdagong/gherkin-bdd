@@ -41,6 +41,6 @@
     那么 页面列出该文件、原始文本和解析警告
 
   场景: 安装时附带 gherkin-to-html 脚本
-    假如 正在为某个 host 安装 gherkin-bdd 的项目
+    假如 正在为某个 coding agent 安装 gherkin-bdd 的项目
     当 技能已安装
     那么 gherkin-to-html 脚本被放入技能的 scripts 目录

@@ -9,9 +9,9 @@ Usage:
 What gets installed: the gherkin-bdd skill (SKILL.md, the BDD rule BDD.md, and
 the skill's scripts — the BDD-rule sync and the gherkin-to-html converter), the
 companion skills (bdd-bootstrap, code-to-gherkin; one SKILL.md each), and a
-SessionStart hook — nothing else. The skill goes into the host's
+SessionStart hook — nothing else. The skill goes into the coding agent's
 project-level skills directory (.claude/skills/ or .agents/skills/), which both
-hosts discover natively; there is no plugin packaging or marketplace
+coding agents discover natively; there is no plugin packaging or marketplace
 registration. The source is the repository that ships this script; the install
 target is the current working directory. Re-running is idempotent.
 """
@@ -34,13 +34,13 @@ SESSION_HOOK_MARKER = "check_bdd_sync.py"
 SESSION_HOOK_STATUS = "Syncing BDD rule"
 
 SOURCE = Path(__file__).resolve().parent.parent
-HOST_SKILL_DIRS = {"claude": ".claude/skills", "codex": ".agents/skills"}
-HOST_HOOK_FILES = {"claude": ".claude/settings.json", "codex": ".codex/hooks.json"}
+CODING_AGENT_SKILL_DIRS = {"claude": ".claude/skills", "codex": ".agents/skills"}
+CODING_AGENT_HOOK_FILES = {"claude": ".claude/settings.json", "codex": ".codex/hooks.json"}
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    install(Path.cwd(), args.host)
+    install(Path.cwd(), args.coding_agent)
     return 0
 
 
@@ -53,16 +53,16 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "host",
+        "coding_agent",
         choices=("claude", "codex"),
-        help="Which host to install for.",
+        help="Which coding agent to install for.",
     )
     return parser.parse_args(argv)
 
 
-def install(project_dir: Path, host: str) -> None:
+def install(project_dir: Path, coding_agent: str) -> None:
     validate_source()
-    skills_root = project_dir / HOST_SKILL_DIRS[host]
+    skills_root = project_dir / CODING_AGENT_SKILL_DIRS[coding_agent]
     skill_dir = skills_root / SKILL_NAME
     print(f"Skill target: {skill_dir}")
     install_skill(skill_dir)
@@ -71,20 +71,20 @@ def install(project_dir: Path, host: str) -> None:
         print(f"Skill target: {companion_dir}")
         install_companion_skill(companion_dir, name)
 
-    skill_ref = f"{HOST_SKILL_DIRS[host]}/{SKILL_NAME}"
+    skill_ref = f"{CODING_AGENT_SKILL_DIRS[coding_agent]}/{SKILL_NAME}"
     bdd_ref = f"{skill_ref}/BDD.md"
-    if host == "claude":
+    if coding_agent == "claude":
         command = (
             f'python3 "${{CLAUDE_PROJECT_DIR}}/{skill_ref}/scripts/check_bdd_sync.py" '
-            f'--host claude --bdd-ref "{bdd_ref}"'
+            f'--coding-agent claude --bdd-ref "{bdd_ref}"'
         )
         status_message = None
     else:
         script = skill_dir / "scripts" / "check_bdd_sync.py"
-        command = f'python3 "{script}" --host codex --bdd-ref "{bdd_ref}"'
+        command = f'python3 "{script}" --coding-agent codex --bdd-ref "{bdd_ref}"'
         status_message = SESSION_HOOK_STATUS
-    register_hook(project_dir / HOST_HOOK_FILES[host], command, status_message)
-    run_bdd_sync(project_dir, skill_dir / "scripts" / "check_bdd_sync.py", host, bdd_ref)
+    register_hook(project_dir / CODING_AGENT_HOOK_FILES[coding_agent], command, status_message)
+    run_bdd_sync(project_dir, skill_dir / "scripts" / "check_bdd_sync.py", coding_agent, bdd_ref)
 
 
 def validate_source() -> None:
@@ -125,18 +125,18 @@ def reset_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def run_bdd_sync(project_dir: Path, script: Path, host: str, bdd_ref: str) -> None:
+def run_bdd_sync(project_dir: Path, script: Path, coding_agent: str, bdd_ref: str) -> None:
     """Sync the BDD rule using the very same script the SessionStart hook runs.
 
     The installer feeds the script the same JSON payload a SessionStart hook
     would, so install-time and session-time sync share one implementation.
     """
-    print(f"  sync BDD rule ({script.name} --host {host})")
+    print(f"  sync BDD rule ({script.name} --coding-agent {coding_agent})")
     payload = json.dumps(
         {"cwd": str(project_dir), "hook_event_name": "SessionStart", "source": "startup"}
     )
     result = subprocess.run(
-        [sys.executable, str(script), "--host", host, "--bdd-ref", bdd_ref],
+        [sys.executable, str(script), "--coding-agent", coding_agent, "--bdd-ref", bdd_ref],
         input=payload,
         capture_output=True,
         text=True,

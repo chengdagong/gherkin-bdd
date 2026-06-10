@@ -7,18 +7,18 @@ A shared Gherkin BDD skill for Codex and Claude Code, plus a sync mechanism that
 What ships:
 
 - `skills/gherkin-bdd/SKILL.md` — the Gherkin BDD workflow (drafting, reviewing, and implementing behavior specs)
-- `skills/bdd-bootstrap/SKILL.md` — a skill that runs the installer for whichever host the session is running in
+- `skills/bdd-bootstrap/SKILL.md` — a skill that runs the installer for whichever coding agent the session is running in
 - `skills/code-to-gherkin/SKILL.md` — a skill that reads the code and backfills `.feature` coverage for behavior no Gherkin file describes yet
 - `BDD.md` — the BDD rule text, the single source of truth
-- `scripts/check_bdd_sync.py` — keeps a reference to the rule in each host's instruction file
+- `scripts/check_bdd_sync.py` — keeps a reference to the rule in each coding agent's instruction file
 - `scripts/gherkin_to_html.py` — renders every `.feature` file in the project, as it is, into one easy-to-read HTML page
 - `bin/bdd-bootstrap` — the per-project installer
 
-There is no plugin packaging: both hosts discover project-level skills natively, so the installer just lays files down and registers one hook.
+There is no plugin packaging: both coding agents discover project-level skills natively, so the installer just lays files down and registers one hook.
 
 ## Install
 
-Install into the **current directory**, one host at a time:
+Install into the **current directory**, one coding agent at a time:
 
 ```bash
 bin/bdd-bootstrap claude   # Claude Code
@@ -41,7 +41,7 @@ The CLI only supports project-level installation. It does not write to `~/.claud
 
 ## BDD rule sync
 
-`BDD.md` is the single source of truth for the rule. Instead of copying its text into your project, the sync injects a short **reference** to it into the host's canonical instruction file — `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex — inside a managed region marked by HTML comments. The reference is host-specific:
+`BDD.md` is the single source of truth for the rule. Instead of copying its text into your project, the sync injects a short **reference** to it into the coding agent's canonical instruction file — `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex — inside a managed region marked by HTML comments. The reference is coding-agent-specific:
 
 - **Claude Code** expands `@path` imports, so the reference is `@<path-to-BDD.md>` and `BDD.md` is loaded into context automatically.
 - **Codex** does not expand imports, so the reference is an imperative directive requiring the agent to read `BDD.md`.
@@ -62,7 +62,7 @@ It writes `docs/gherkin.html` by default, creating `docs/` when needed (override
 
 In Claude Code, run `/gherkin-bdd` (or just describe Gherkin work — the skill description triggers it). Codex lists project skills automatically and loads the skill when a task matches. After re-installing, restart the session (Claude Code: or run `/reload-plugins`).
 
-`/bdd-bootstrap` re-runs the installer for the current project from inside a session: it detects whether it is running in Claude Code or Codex and passes the matching host argument. Name a host explicitly (`/bdd-bootstrap codex`) to install for the other host.
+`/bdd-bootstrap` re-runs the installer for the current project from inside a session: it detects whether it is running in Claude Code or Codex and passes the matching coding agent argument. Name the target product explicitly (`/bdd-bootstrap codex`) to install for the other one.
 
 `/code-to-gherkin` makes an existing codebase BDD-driven: it reads the code, finds user-facing behavior that no `.feature` file describes yet, and records it as Gherkin scenarios — capture of what the code does today, never invention. Suspicious behavior becomes a question to you, not a silent spec; backfilled scenarios get characterization tests that must pass against the current code. It works with partial or zero existing coverage and is safe to re-run. Converting a non-BDD project is the composition: `/bdd-bootstrap`, then `/code-to-gherkin`.
 

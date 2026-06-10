@@ -43,6 +43,6 @@
     那么 每个补写场景都会获得一个能在当前代码上通过的测试
 
   场景: 安装时附带 code-to-gherkin 技能
-    假如 正在为某个 host 安装 gherkin-bdd 的项目
+    假如 正在为某个 coding agent 安装 gherkin-bdd 的项目
     当 技能已安装
     那么 code-to-gherkin 技能与 gherkin-bdd 技能安装在同一级目录

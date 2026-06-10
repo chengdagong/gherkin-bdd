@@ -16,24 +16,24 @@ _Avoid_: "feature file" when the sentence is about the file rather than the user
 The project requirement that every feature has a matching `.feature` file, treated as the source of truth for its behaviour. Its canonical text is the tool's `BDD.md`, shipped with the skill and refreshed by re-installing; projects reference it and do not edit their installed copy.
 _Avoid_: "the convention", "the policy", "BDD requirements".
 
-**Host**:
-An agent platform the plugin installs into — Claude Code or Codex. Each host reads its own instruction file and loads hooks in its own way.
-_Avoid_: "platform", "client", "IDE", "editor".
+**Coding agent**:
+An agent product the installer targets — currently Claude Code or Codex. Each coding agent reads its own instruction file and loads hooks in its own way.
+_Avoid_: "host", "platform", "client", "IDE", "editor".
 
 **Instruction file**:
-The project-root file a host reads for standing agent instructions: `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex.
+The project-root file a coding agent reads for standing agent instructions: `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex.
 _Avoid_: "config file", "rules file", "prompt file".
 
 **Canonical instruction file**:
-The one instruction file a given host actually reads — `CLAUDE.md` for the `claude` host, `AGENTS.md` for the `codex` host. The BDD rule must be reachable from here for that host to see it.
+The one instruction file a given coding agent actually reads — `CLAUDE.md` for the `claude` coding agent, `AGENTS.md` for the `codex` coding agent. The BDD rule must be reachable from here for that coding agent to see it.
 _Avoid_: "default instruction file".
 
 **Rule reference**:
-The pointer to `BDD.md` placed in a host's instruction file in place of the rule's full text. For Claude it is an `@`-import that auto-loads; for Codex it is a directive requiring the agent to read `BDD.md`.
+The pointer to `BDD.md` placed in a coding agent's instruction file in place of the rule's full text. For Claude it is an `@`-import that auto-loads; for Codex it is a directive requiring the agent to read `BDD.md`.
 _Avoid_: "the rule copy", "inlined rule".
 
 **Bootstrap skill**:
-The skill that runs the installer from inside an agent session, targeting the host the session runs in unless the user names one.
+The skill that runs the installer from inside an agent session, targeting the coding agent the session runs in unless the user names one.
 _Avoid_: conflating it with the installer CLI itself (`bin/bdd-bootstrap`).
 
 **Code to Gherkin**:

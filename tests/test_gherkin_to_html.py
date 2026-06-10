@@ -193,7 +193,7 @@ def project_with_broken_feature(project: Path) -> None:
     )
 
 
-@given("正在为某个 host 安装 gherkin-bdd 的项目")
+@given("正在为某个 coding agent 安装 gherkin-bdd 的项目")
 def blank_install_project(project: Path) -> None:
     pass
 

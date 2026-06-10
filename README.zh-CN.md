@@ -7,18 +7,18 @@
 包含的内容：
 
 - `skills/gherkin-bdd/SKILL.md` —— Gherkin BDD 工作流（行为规格的起草、评审与实现）
-- `skills/bdd-bootstrap/SKILL.md` —— 一个技能：在会话内为当前所处的 host 运行安装器
+- `skills/bdd-bootstrap/SKILL.md` —— 一个技能：在会话内为当前所处的 coding agent 运行安装器
 - `skills/code-to-gherkin/SKILL.md` —— 一个技能：阅读代码，把尚未被任何 `.feature` 文件描述的行为补写成 Gherkin
 - `BDD.md` —— BDD 规则文本，唯一事实来源
-- `scripts/check_bdd_sync.py` —— 在各 host 的指令文件中维护对规则的引用
+- `scripts/check_bdd_sync.py` —— 在各 coding agent 的指令文件中维护对规则的引用
 - `scripts/gherkin_to_html.py` —— 把项目里所有 `.feature` 文件原样渲染成一个易读的 HTML 页面
 - `bin/bdd-bootstrap` —— 项目级安装器
 
-没有 plugin 包装：两个 host 都原生发现项目级技能，安装器只是放置文件并注册一条 hook。
+没有 plugin 包装：两个 coding agent 都原生发现项目级技能，安装器只是放置文件并注册一条 hook。
 
 ## 安装
 
-安装进**当前目录**，一次一个 host：
+安装进**当前目录**，一次一个 coding agent：
 
 ```bash
 bin/bdd-bootstrap claude   # Claude Code
@@ -41,7 +41,7 @@ bin/bdd-bootstrap codex    # Codex
 
 ## BDD 规则同步
 
-`BDD.md` 是规则的唯一事实来源。同步机制不会把它的文本复制进你的项目，而是在 host 的规范指令文件（Claude Code 为 `CLAUDE.md`，Codex 为 `AGENTS.md`）中注入一个简短的**引用**，放在由 HTML 注释标记的受管区域内。引用因 host 而异：
+`BDD.md` 是规则的唯一事实来源。同步机制不会把它的文本复制进你的项目，而是在 coding agent 的规范指令文件（Claude Code 为 `CLAUDE.md`，Codex 为 `AGENTS.md`）中注入一个简短的**引用**，放在由 HTML 注释标记的受管区域内。引用因 coding agent 而异：
 
 - **Claude Code** 会展开 `@path` import，所以引用是 `@<BDD.md 的路径>`，`BDD.md` 会被自动载入上下文。
 - **Codex** 不会展开 import，所以引用是一条要求 agent 必须阅读 `BDD.md` 的强制指令。
@@ -62,7 +62,7 @@ python3 .claude/skills/gherkin-bdd/scripts/gherkin_to_html.py   # Codex 则为 .
 
 在 Claude Code 中运行 `/gherkin-bdd`（或者直接描述 Gherkin 相关工作——技能描述会自动触发）。Codex 会自动列出项目技能，并在任务匹配时加载。重新安装后请重启会话（Claude Code 也可运行 `/reload-plugins`）。
 
-`/bdd-bootstrap` 在会话内重新运行当前项目的安装器：它会识别自己运行在 Claude Code 还是 Codex 中，并传入对应的 host 参数。也可以显式指定 host（如 `/bdd-bootstrap codex`）来为另一个 host 安装。
+`/bdd-bootstrap` 在会话内重新运行当前项目的安装器：它会识别自己运行在 Claude Code 还是 Codex 中，并传入对应的 coding agent 参数。也可以显式指定目标产品（如 `/bdd-bootstrap codex`）来为另一个产品安装。
 
 `/code-to-gherkin` 让既有代码库变成 BDD 驱动：阅读代码，找出尚未被任何 `.feature` 文件描述的用户可见行为，把它**记录**成 Gherkin 场景——只记录代码今天实际做什么，绝不发明。可疑的行为会变成抛给你的问题，而不是被悄悄写成规格；补写的场景会配上「刻画测试」（characterization test），必须立即在当前代码上通过。存量覆盖是部分还是为零都适用，可安全重复运行。把非 BDD 项目转成 BDD 项目就是两步组合：先 `/bdd-bootstrap`，再 `/code-to-gherkin`。
 

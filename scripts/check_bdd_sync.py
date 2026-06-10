@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """SessionStart hook: keep a reference to the BDD rule in project instructions.
 
-This script is shared by Claude Code and Codex. Both hosts invoke it as a
-SessionStart hook with ``--host {claude|codex}`` and ``--bdd-ref <path>`` baked in
-by the installer, and pass a JSON payload on stdin (with a ``cwd`` field).
+This script is shared by Claude Code and Codex. Both coding agents invoke it as
+a SessionStart hook with ``--coding-agent {claude|codex}`` and
+``--bdd-ref <path>`` baked in by the installer, and pass a JSON payload on stdin
+(with a ``cwd`` field).
 
 It does NOT inline ``BDD.md``; ``BDD.md`` stays the single source of truth. It
 keeps a short *reference* to it inside a managed region (marked by
 ``<!-- gherkin-bdd:rule:start -->`` / ``<!-- gherkin-bdd:rule:end -->``) in the
-host's canonical instruction file — ``CLAUDE.md`` for Claude, ``AGENTS.md`` for
-Codex. The reference differs by host:
+coding agent's canonical instruction file — ``CLAUDE.md`` for Claude,
+``AGENTS.md`` for Codex. The reference differs by coding agent:
 
 - Claude Code reads ``CLAUDE.md`` and expands ``@path`` imports into context, so
   the reference is an ``@<bdd-ref>`` import that auto-loads ``BDD.md``.
@@ -29,18 +30,18 @@ import sys
 from pathlib import Path
 
 INSTRUCTION_FILES = ("CLAUDE.md", "AGENTS.md")
-HOST_CANONICAL_FILE = {"claude": "CLAUDE.md", "codex": "AGENTS.md"}
+CODING_AGENT_CANONICAL_FILE = {"claude": "CLAUDE.md", "codex": "AGENTS.md"}
 MARKER_START = "<!-- gherkin-bdd:rule:start -->"
 MARKER_END = "<!-- gherkin-bdd:rule:end -->"
 
 
 def main() -> int:
-    host, bdd_ref = parse_options()
-    if not host or not bdd_ref:
+    coding_agent, bdd_ref = parse_options()
+    if not coding_agent or not bdd_ref:
         return 0
 
     project_dir = resolve_project_dir(read_payload())
-    changed = sync_instructions(project_dir, host, bdd_ref)
+    changed = sync_instructions(project_dir, coding_agent, bdd_ref)
     if changed:
         emit_notice(changed)
     return 0
@@ -48,10 +49,10 @@ def main() -> int:
 
 def parse_options() -> tuple[str | None, str | None]:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--host", choices=tuple(HOST_CANONICAL_FILE))
+    parser.add_argument("--coding-agent", choices=tuple(CODING_AGENT_CANONICAL_FILE))
     parser.add_argument("--bdd-ref")
     args, _ = parser.parse_known_args()
-    return args.host, args.bdd_ref
+    return args.coding_agent, args.bdd_ref
 
 
 def read_payload() -> dict:
@@ -78,10 +79,10 @@ def resolve_project_dir(payload: dict) -> Path:
     return Path.cwd()
 
 
-def sync_instructions(project_dir: Path, host: str, bdd_ref: str) -> list[str]:
-    """Keep the rule reference in the host's canonical file. Returns changed names."""
-    canonical = HOST_CANONICAL_FILE[host]
-    snippet = build_snippet(host, bdd_ref)
+def sync_instructions(project_dir: Path, coding_agent: str, bdd_ref: str) -> list[str]:
+    """Keep the rule reference in the coding agent's canonical file. Returns changed names."""
+    canonical = CODING_AGENT_CANONICAL_FILE[coding_agent]
+    snippet = build_snippet(coding_agent, bdd_ref)
     existing = existing_instruction_files(project_dir)
     match = next((p for p in existing if p.name.lower() == canonical.lower()), None)
     target = match if match is not None else project_dir / canonical
@@ -90,8 +91,8 @@ def sync_instructions(project_dir: Path, host: str, bdd_ref: str) -> list[str]:
     return []
 
 
-def build_snippet(host: str, bdd_ref: str) -> str:
-    if host == "claude":
+def build_snippet(coding_agent: str, bdd_ref: str) -> str:
+    if coding_agent == "claude":
         return f"## BDD rule\n\n@{bdd_ref}"
     return (
         "## BDD rule (required)\n\n"

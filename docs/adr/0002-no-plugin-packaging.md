@@ -3,7 +3,7 @@
 Both Claude Code (`.claude/skills/`) and Codex (`.agents/skills/`) natively discover
 project-level skills committed into a repository. The installer therefore copies the
 skill (`SKILL.md` + `BDD.md` + the sync script) straight into those directories and
-registers the SessionStart hook in the host's own config. The former plugin
+registers the SessionStart hook in the coding agent's own config. The former plugin
 packaging — `.claude-plugin/` and `.codex-plugin/` manifests plus a Codex
 `marketplace.json` registration — was removed: for project-level installs it added
 moving parts without adding capability.

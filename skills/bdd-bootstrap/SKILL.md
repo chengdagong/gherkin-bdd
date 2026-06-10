@@ -5,7 +5,7 @@ description: Set up or refresh the Gherkin BDD skill and BDD-rule sync in the cu
 
 # BDD Bootstrap
 
-Run the `bdd-bootstrap` installer for the host this session is running in. The
+Run the `bdd-bootstrap` installer for the coding agent this session is running in. The
 installer lays the Gherkin BDD skill into the project's skills directory and
 registers a session-start hook that keeps the BDD rule referenced from the
 project's instruction file. It is idempotent — re-running refreshes the install
@@ -13,13 +13,13 @@ in place.
 
 ## Steps
 
-1. **Pick the host argument.**
-   - If the user named a host when invoking the skill (`claude` or `codex` —
+1. **Pick the coding agent argument.**
+   - If the user named a coding agent when invoking the skill (`claude` or `codex` —
      `$ARGUMENTS` when run as a Claude Code slash command), use that.
    - Otherwise use the environment you are running in: pass `claude` if you are
      Claude Code, `codex` if you are Codex. As a shell-level cross-check, the
      environment variable `CLAUDECODE=1` indicates Claude Code.
-   - If you cannot tell which host you are running in, ask the user instead of
+   - If you cannot tell which coding agent you are running in, ask the user instead of
      guessing.
 
 2. **Locate the installer.** It is `bin/bdd-bootstrap` in the gherkin-bdd
@@ -37,7 +37,7 @@ in place.
    working directory:
 
    ```bash
-   cd <project-root> && <source-repo>/bin/bdd-bootstrap <host>
+   cd <project-root> && <source-repo>/bin/bdd-bootstrap <coding-agent>
    ```
 
 4. **Report the result.** Tell the user where the skills landed, where the
