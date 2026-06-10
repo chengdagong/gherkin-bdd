@@ -54,7 +54,7 @@ The script takes `--host {claude|codex}` and `--bdd-ref <path>` (both baked into
 
 - `SKILL.md` frontmatter (`name`, `description`) drives skill discovery; `$ARGUMENTS` in the skill body is the Claude Code slash-command argument hook.
 - Do not place `README.md` (or any plain markdown) directly under `agents/` — Claude Code treats markdown files there as agent definitions.
-- `.claude/skills/gherkin-bdd/` in this repo is a **copy-mode self-install** (the plugin dogfooded into its own project). Because it is a copy, it does not update when you edit `skills/...`; refresh it by running `bin/bdd-bootstrap claude` again. Edit the top-level source, not this copy.
+- `.claude/skills/gherkin-bdd/` in this repo is a **copy-mode self-install** (the plugin dogfooded into its own project). Because it is a copy, it does not update when you edit `skills/...`; refresh it by running `bin/bdd-bootstrap claude` again. Edit the top-level source, not this copy. `.claude/` is gitignored here, so after a fresh clone run `bin/bdd-bootstrap claude` once — until then the `@`-import at the end of this file dangles and the BDD rule is not auto-loaded.
 
 ## Agent skills
 
@@ -69,3 +69,9 @@ Five canonical triage roles, each mapped to a label of the same name (`needs-tri
 ### Domain docs
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.
+
+<!-- gherkin-bdd:rule:start -->
+## BDD rule
+
+@.claude/skills/gherkin-bdd/BDD.md
+<!-- gherkin-bdd:rule:end -->

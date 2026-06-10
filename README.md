@@ -40,6 +40,8 @@ After changing plugin components, run this inside Claude Code:
 /reload-plugins
 ```
 
+This repository dogfoods its own plugin but gitignores the install artifacts (`.claude/`), so after a fresh clone run `bin/bdd-bootstrap claude` once. Until then the `@`-import at the end of `CLAUDE.md` dangles and the BDD rule is not auto-loaded.
+
 ## Install With CLI
 
 Install this plugin into the **current directory**, one host at a time:
@@ -56,7 +58,7 @@ Install targets:
 - Claude Code: `.claude/skills/gherkin-bdd` + a `SessionStart` hook in `.claude/settings.json`
 - Codex: `.agents/plugins/plugins/gherkin-bdd` + a marketplace entry in `.agents/plugins/marketplace.json` + a `SessionStart` hook in `.codex/hooks.json`
 
-Both installs are plain copies, so they are self-contained and easy to commit with the project. To pick up changes made in this repository (including `BDD.md`), re-run the installer in the project.
+Both installs are plain copies, so they are self-contained — **commit the installed files with your project**. That way collaborators get the skill, the session hook, and the file the `CLAUDE.md` import points at without running the installer themselves. If you gitignore the install directory instead, the `@`-import in `CLAUDE.md` dangles (harmlessly — the rule is just not auto-loaded) until each clone runs the installer once. To pick up changes made in this repository (including `BDD.md`), re-run the installer in the project.
 
 `BDD.md` defines the project rule that every application feature should have a `.feature` file, and that Gherkin feature file is the source of truth for app behavior.
 
