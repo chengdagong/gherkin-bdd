@@ -32,8 +32,14 @@ Feature: BDD rule sync
     When the BDD sync runs
     Then the instruction file is left unchanged
 
+  Scenario: Install lays down the skill for the chosen host
+    Given a project being set up with the gherkin-bdd installer for a host
+    When the skill is installed
+    Then the skill, the BDD rule, and the sync script are placed in the host's project skills directory
+    And nothing else is added to the project
+
   Scenario: Install runs the same sync
     Given a project being set up with the gherkin-bdd installer for a host
-    When the plugin is installed
+    When the skill is installed
     Then the host's canonical instruction file references BDD.md
     And a session-start hook is registered to run the same sync script later

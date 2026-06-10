@@ -1,90 +1,60 @@
-# Gherkin BDD Plugin
+# Gherkin BDD
 
-This repository is a shared plugin skeleton for Codex and Claude Code.
+**English** | [中文](README.zh-CN.md)
 
-It keeps the reusable workflow in `skills/`, then gives each host its own manifest:
+A shared Gherkin BDD skill for Codex and Claude Code, plus a sync mechanism that keeps every installed project pointed at one BDD rule: each application feature is specified by a `.feature` file, and that Gherkin file is the source of truth for app behavior.
 
-- Codex: `.codex-plugin/plugin.json`
-- Claude Code: `.claude-plugin/plugin.json`
-- BDD project rules: `BDD.md`
+What ships:
 
-The shared skill lives at `skills/gherkin-bdd/SKILL.md`.
+- `skills/gherkin-bdd/SKILL.md` — the Gherkin BDD workflow (drafting, reviewing, and implementing behavior specs)
+- `BDD.md` — the BDD rule text, the single source of truth
+- `scripts/check_bdd_sync.py` — keeps a reference to the rule in each host's instruction file
+- `bin/bdd-bootstrap` — the per-project installer
 
-## Use In Codex
+There is no plugin packaging: both hosts discover project-level skills natively, so the installer just lays files down and registers one hook.
 
-Install or package this directory as a Codex plugin source. The Codex manifest points to the shared `skills/` directory and keeps host-specific UI metadata in `.codex-plugin/plugin.json`.
+## Install
 
-For local validation:
-
-```bash
-python3 ~/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py .
-```
-
-## Use In Claude Code
-
-For local development, load the plugin directly:
-
-```bash
-claude --plugin-dir .
-```
-
-Then run the namespaced skill:
-
-```text
-/gherkin-bdd:gherkin-bdd
-```
-
-After changing plugin components, run this inside Claude Code:
-
-```text
-/reload-plugins
-```
-
-This repository dogfoods its own plugin but gitignores the install artifacts (`.claude/`), so after a fresh clone run `bin/bdd-bootstrap claude` once. Until then the `@`-import at the end of `CLAUDE.md` dangles and the BDD rule is not auto-loaded.
-
-## Install With CLI
-
-Install this plugin into the **current directory**, one host at a time:
+Install into the **current directory**, one host at a time:
 
 ```bash
 bin/bdd-bootstrap claude   # Claude Code
 bin/bdd-bootstrap codex    # Codex
 ```
 
-The single positional argument (`claude` or `codex`) is required. The plugin source is the repository that ships `bin/bdd-bootstrap`; the install target is your current working directory — so `cd` into the project you want to set up, then run the command. Re-running is idempotent.
+The single positional argument (`claude` or `codex`) is required. The source is the repository that ships `bin/bdd-bootstrap`; the install target is your current working directory — so `cd` into the project you want to set up, then run the command. Re-running is idempotent.
 
-Install targets:
+What gets installed — and nothing else:
 
-- Claude Code: `.claude/skills/gherkin-bdd` + a `SessionStart` hook in `.claude/settings.json`
-- Codex: `.agents/plugins/plugins/gherkin-bdd` + a marketplace entry in `.agents/plugins/marketplace.json` + a `SessionStart` hook in `.codex/hooks.json`
+|  | Claude Code | Codex |
+|---|---|---|
+| Skill (`SKILL.md` + `BDD.md` + sync script) | `.claude/skills/gherkin-bdd/` | `.agents/skills/gherkin-bdd/` |
+| `SessionStart` hook | `.claude/settings.json` | `.codex/hooks.json` |
+| Rule reference (managed region) | `CLAUDE.md` | `AGENTS.md` |
 
-Both installs are plain copies, so they are self-contained — **commit the installed files with your project**. That way collaborators get the skill, the session hook, and the file the `CLAUDE.md` import points at without running the installer themselves. If you gitignore the install directory instead, the `@`-import in `CLAUDE.md` dangles (harmlessly — the rule is just not auto-loaded) until each clone runs the installer once. To pick up changes made in this repository (including `BDD.md`), re-run the installer in the project.
+The install is a self-contained copy — **commit the installed files with your project**. That way collaborators get the skill, the session hook, and the file the `CLAUDE.md` import points at without running the installer themselves. If you gitignore the install directory instead, the `@`-import in `CLAUDE.md` dangles (harmlessly — the rule is just not auto-loaded) until each clone runs the installer once. To pick up changes made in this repository (including `BDD.md`), re-run the installer in the project.
 
-`BDD.md` defines the project rule that every application feature should have a `.feature` file, and that Gherkin feature file is the source of truth for app behavior.
+The CLI only supports project-level installation. It does not write to `~/.claude`, `~/.codex`, `~/.agents`, or any other user-level location.
 
-### BDD rule sync
+## BDD rule sync
 
-`BDD.md` is the single source of truth for the rule. Instead of copying its text into your project, the plugin injects a short **reference** to it into the host's canonical instruction file — `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex — inside a managed region marked by HTML comments. The reference is host-specific:
+`BDD.md` is the single source of truth for the rule. Instead of copying its text into your project, the sync injects a short **reference** to it into the host's canonical instruction file — `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex — inside a managed region marked by HTML comments. The reference is host-specific:
 
 - **Claude Code** expands `@path` imports, so the reference is `@<path-to-BDD.md>` and `BDD.md` is loaded into context automatically.
 - **Codex** does not expand imports, so the reference is an imperative directive requiring the agent to read `BDD.md`.
 
-A single script, `scripts/check_bdd_sync.py`, owns this. The installer runs it once (feeding it the same JSON payload a hook would), and a `SessionStart` hook runs the **same** script on every session start/resume. It creates the canonical file if absent, refreshes the managed region, and does nothing once the reference is current (idempotent). It never blocks the session. Claude Code only loads hooks from `settings.json` (or a registered plugin), not from a copied skill directory, which is why the hook lives in `.claude/settings.json`.
+A single script, `scripts/check_bdd_sync.py`, owns this. The installer runs it once (feeding it the same JSON payload a hook would), and a `SessionStart` hook runs the **same** script on every session start/resume. It creates the canonical file if absent, refreshes the managed region, and does nothing once the reference is current (idempotent). It never blocks the session. Claude Code only loads hooks from `settings.json`, not from a skill directory, which is why the hook lives in `.claude/settings.json`.
 
-This CLI only supports project-level installation. It does not write to `~/.claude`, `~/.agents`, or any other user-level location.
+## Using the skill
 
-For Claude Code, restart the session or run `/reload-plugins`. For Codex, refresh local plugins after the marketplace entry is written.
+In Claude Code, run `/gherkin-bdd` (or just describe Gherkin work — the skill description triggers it). Codex lists project skills automatically and loads the skill when a task matches. After re-installing, restart the session (Claude Code: or run `/reload-plugins`).
 
-## Suggested Next Files
+## Developing this repo
 
-- `agents/`: optional Claude Code subagents for feature review or step-definition planning.
-- `hooks/hooks.json`: optional Claude Code hooks. Add only when an automatic command is really needed.
-- `.mcp.json`: optional MCP server config for shared tools.
-- `scripts/`: helper scripts used by skills, hooks, or MCP servers.
-- `examples/`: sample feature files and review outputs.
+This repository dogfoods its own skill but gitignores the install artifacts (`.claude/`), so after a fresh clone run `bin/bdd-bootstrap claude` once. Until then the `@`-import at the end of `CLAUDE.md` dangles and the BDD rule is not auto-loaded.
 
-## Compatibility Notes
+Run the tests:
 
-Keep host-specific metadata in the matching manifest. The shared `skills/` directory should stay portable and avoid assumptions about one host's tool names.
-
-Codex validation is stricter about manifest fields, so do not copy Claude-only fields into `.codex-plugin/plugin.json` unless Codex supports them.
+```bash
+python3 -m unittest discover -s tests
+```

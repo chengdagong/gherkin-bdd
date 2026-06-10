@@ -16,7 +16,7 @@ CLI_PATH = ROOT / "bin" / "bdd-bootstrap"
 CHECK_SCRIPT = ROOT / "scripts" / "check_bdd_sync.py"
 MARKER_START = "<!-- gherkin-bdd:rule:start -->"
 CLAUDE_REF = ".claude/skills/gherkin-bdd/BDD.md"
-CODEX_REF = ".agents/plugins/plugins/gherkin-bdd/BDD.md"
+CODEX_REF = ".agents/skills/gherkin-bdd/BDD.md"
 
 
 def load_cli():
@@ -42,22 +42,27 @@ class InstallCliTest(unittest.TestCase):
         os.chdir(self._old_cwd)
         self.tmp.cleanup()
 
+    def _assert_skill_layout(self, skill_dir: Path) -> None:
+        self.assertTrue((skill_dir / "SKILL.md").exists())
+        self.assertTrue((skill_dir / "BDD.md").exists())
+        self.assertTrue((skill_dir / "scripts" / "check_bdd_sync.py").exists())
+        self.assertEqual(
+            sorted(p.name for p in skill_dir.iterdir()),
+            ["BDD.md", "SKILL.md", "scripts"],
+        )
+
     # --- install: claude ---------------------------------------------------
 
-    def test_claude_install_copies_tree_and_registers_hook(self) -> None:
+    def test_claude_install_lays_skill_and_registers_hook(self) -> None:
         self.assertEqual(self.cli.main(["claude"]), 0)
 
-        plugin = self.root / ".claude" / "skills" / "gherkin-bdd"
-        self.assertTrue((plugin / ".claude-plugin" / "plugin.json").exists())
-        self.assertTrue((plugin / "skills" / "gherkin-bdd" / "SKILL.md").exists())
-        self.assertTrue((plugin / "BDD.md").exists())
-        self.assertFalse((plugin / "skills").is_symlink())
+        self._assert_skill_layout(self.root / ".claude" / "skills" / "gherkin-bdd")
 
         settings = json.loads((self.root / ".claude" / "settings.json").read_text(encoding="utf-8"))
         command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         self.assertIn("check_bdd_sync.py", command)
         self.assertIn("--host claude", command)
-        self.assertIn("--bdd-ref", command)
+        self.assertIn(f'--bdd-ref "{CLAUDE_REF}"', command)
         self.assertIn("${CLAUDE_PROJECT_DIR}", command)
 
     def test_claude_install_writes_import_reference(self) -> None:
@@ -69,26 +74,16 @@ class InstallCliTest(unittest.TestCase):
 
     # --- install: codex ----------------------------------------------------
 
-    def test_codex_install_copies_tree_and_registers_hook(self) -> None:
+    def test_codex_install_lays_skill_and_registers_hook(self) -> None:
         self.assertEqual(self.cli.main(["codex"]), 0)
 
-        plugin = self.root / ".agents" / "plugins" / "plugins" / "gherkin-bdd"
-        self.assertTrue((plugin / ".codex-plugin" / "plugin.json").exists())
-        self.assertTrue((plugin / "skills" / "gherkin-bdd" / "SKILL.md").exists())
-        self.assertTrue((plugin / "BDD.md").exists())
-        self.assertFalse((plugin / "skills").is_symlink())
-        self.assertFalse((plugin / "BDD.md").is_symlink())
-
-        marketplace = json.loads(
-            (self.root / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(marketplace["plugins"][0]["name"], "gherkin-bdd")
-        self.assertEqual(marketplace["plugins"][0]["source"]["path"], "./plugins/gherkin-bdd")
+        self._assert_skill_layout(self.root / ".agents" / "skills" / "gherkin-bdd")
+        self.assertFalse((self.root / ".agents" / "plugins").exists())
 
         hooks = json.loads((self.root / ".codex" / "hooks.json").read_text(encoding="utf-8"))
         command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         self.assertIn("--host codex", command)
-        self.assertIn("--bdd-ref", command)
+        self.assertIn(f'--bdd-ref "{CODEX_REF}"', command)
 
     def test_codex_install_writes_required_reading_directive(self) -> None:
         self.assertEqual(self.cli.main(["codex"]), 0)
@@ -104,8 +99,7 @@ class InstallCliTest(unittest.TestCase):
         self.assertEqual(self.cli.main(["claude"]), 0)
         self.assertEqual(self.cli.main(["claude"]), 0)
 
-        plugin = self.root / ".claude" / "skills" / "gherkin-bdd"
-        self.assertTrue((plugin / "skills" / "gherkin-bdd" / "SKILL.md").exists())
+        self._assert_skill_layout(self.root / ".claude" / "skills" / "gherkin-bdd")
         settings = json.loads((self.root / ".claude" / "settings.json").read_text(encoding="utf-8"))
         self.assertEqual(len(settings["hooks"]["SessionStart"]), 1)
         self.assertEqual((self.root / "CLAUDE.md").read_text(encoding="utf-8").count(MARKER_START), 1)

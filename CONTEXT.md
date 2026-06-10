@@ -1,6 +1,6 @@
-# Gherkin BDD Plugin
+# Gherkin BDD
 
-A shared plugin that gives Codex and Claude Code one Gherkin BDD workflow and keeps a BDD rule present in each project it is installed into.
+A shared skill that gives Codex and Claude Code one Gherkin BDD workflow and keeps a BDD rule referenced in each project it is installed into.
 
 ## Language
 

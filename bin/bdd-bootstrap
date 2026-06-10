@@ -1,52 +1,51 @@
 #!/usr/bin/env python3
-"""Install this plugin into the current directory for Claude Code or Codex.
+"""Install the Gherkin BDD skill into the current directory for Claude Code or Codex.
 
 Usage:
 
     bdd-bootstrap claude    # install for Claude Code + register its hook
     bdd-bootstrap codex     # install for Codex + register its hook
 
-The plugin source is the repository that ships this script; the install target
-is the current working directory. Re-running is idempotent.
+What gets installed: the skill (SKILL.md), the BDD rule (BDD.md), the sync
+script, and a SessionStart hook — nothing else. The skill goes into the host's
+project-level skills directory (.claude/skills/ or .agents/skills/), which both
+hosts discover natively; there is no plugin packaging or marketplace
+registration. The source is the repository that ships this script; the install
+target is the current working directory. Re-running is idempotent.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-PLUGIN_NAME = "gherkin-bdd"
-DEFAULT_MARKETPLACE_NAME = "project"
-DEFAULT_MARKETPLACE_DISPLAY_NAME = "Project"
-DEFAULT_CATEGORY = "Productivity"
-SHARED_ENTRIES = ("skills", "docs", "examples", "scripts", "hooks", "README.md", "BDD.md")
-CHECK_SCRIPT_RELPATH = "scripts/check_bdd_sync.py"
+SKILL_NAME = "gherkin-bdd"
 SESSION_HOOK_MATCHER = "startup|resume"
 SESSION_HOOK_MARKER = "check_bdd_sync.py"
 SESSION_HOOK_STATUS = "Syncing BDD rule"
 
 SOURCE = Path(__file__).resolve().parent.parent
+HOST_SKILL_DIRS = {"claude": ".claude/skills", "codex": ".agents/skills"}
+HOST_HOOK_FILES = {"claude": ".claude/settings.json", "codex": ".codex/hooks.json"}
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    project_dir = Path.cwd()
-    if args.host == "claude":
-        install_claude(project_dir)
-    else:
-        install_codex(project_dir)
+    install(Path.cwd(), args.host)
     return 0
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="bdd-bootstrap",
-        description="Install this plugin into the current directory for Claude Code or Codex.",
+        description=(
+            "Install the Gherkin BDD skill into the current directory "
+            "for Claude Code or Codex."
+        ),
     )
     parser.add_argument(
         "host",
@@ -56,28 +55,49 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def install_claude(project_dir: Path) -> None:
-    target = project_dir / ".claude" / "skills" / PLUGIN_NAME
-    print(f"Claude Code target: {target}")
-    install_tree(target=target, host_manifest=".claude-plugin")
+def install(project_dir: Path, host: str) -> None:
+    validate_source()
+    skill_dir = project_dir / HOST_SKILL_DIRS[host] / SKILL_NAME
+    print(f"Skill target: {skill_dir}")
+    install_skill(skill_dir)
 
-    bdd_ref = os.path.relpath(target / "BDD.md", project_dir)
-    script = f".claude/skills/{PLUGIN_NAME}/{CHECK_SCRIPT_RELPATH}"
-    command = f'python3 "${{CLAUDE_PROJECT_DIR}}/{script}" --host claude --bdd-ref "{bdd_ref}"'
-    register_hook(project_dir / ".claude" / "settings.json", command, status_message=None)
-    run_bdd_sync(project_dir, target / CHECK_SCRIPT_RELPATH, "claude", bdd_ref)
+    skill_ref = f"{HOST_SKILL_DIRS[host]}/{SKILL_NAME}"
+    bdd_ref = f"{skill_ref}/BDD.md"
+    if host == "claude":
+        command = (
+            f'python3 "${{CLAUDE_PROJECT_DIR}}/{skill_ref}/scripts/check_bdd_sync.py" '
+            f'--host claude --bdd-ref "{bdd_ref}"'
+        )
+        status_message = None
+    else:
+        script = skill_dir / "scripts" / "check_bdd_sync.py"
+        command = f'python3 "{script}" --host codex --bdd-ref "{bdd_ref}"'
+        status_message = SESSION_HOOK_STATUS
+    register_hook(project_dir / HOST_HOOK_FILES[host], command, status_message)
+    run_bdd_sync(project_dir, skill_dir / "scripts" / "check_bdd_sync.py", host, bdd_ref)
 
 
-def install_codex(project_dir: Path) -> None:
-    plugin_dir = project_dir / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
-    print(f"Codex plugin target: {plugin_dir}")
-    install_tree(target=plugin_dir, host_manifest=".codex-plugin")
-    update_codex_marketplace(project_dir / ".agents" / "plugins" / "marketplace.json", plugin_dir)
+def validate_source() -> None:
+    required = (
+        SOURCE / "skills" / SKILL_NAME / "SKILL.md",
+        SOURCE / "scripts" / "check_bdd_sync.py",
+        SOURCE / "BDD.md",
+    )
+    missing = [str(path) for path in required if not path.exists()]
+    if missing:
+        raise SystemExit("Source is missing required paths:\n" + "\n".join(missing))
 
-    bdd_ref = os.path.relpath(plugin_dir / "BDD.md", project_dir)
-    command = f'python3 "{plugin_dir / CHECK_SCRIPT_RELPATH}" --host codex --bdd-ref "{bdd_ref}"'
-    register_hook(project_dir / ".codex" / "hooks.json", command, status_message=SESSION_HOOK_STATUS)
-    run_bdd_sync(project_dir, plugin_dir / CHECK_SCRIPT_RELPATH, "codex", bdd_ref)
+
+def install_skill(skill_dir: Path) -> None:
+    if skill_dir.exists() or skill_dir.is_symlink():
+        remove_path(skill_dir)
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    copy_path(SOURCE / "skills" / SKILL_NAME / "SKILL.md", skill_dir / "SKILL.md")
+    copy_path(SOURCE / "BDD.md", skill_dir / "BDD.md")
+    copy_path(
+        SOURCE / "scripts" / "check_bdd_sync.py",
+        skill_dir / "scripts" / "check_bdd_sync.py",
+    )
 
 
 def run_bdd_sync(project_dir: Path, script: Path, host: str, bdd_ref: str) -> None:
@@ -112,40 +132,6 @@ def read_system_message(stdout: str) -> str | None:
         return json.loads(stdout).get("systemMessage")
     except json.JSONDecodeError:
         return None
-
-
-def install_tree(*, target: Path, host_manifest: str) -> None:
-    if target.exists() or target.is_symlink():
-        remove_path(target)
-    target.mkdir(parents=True, exist_ok=True)
-    copy_path(SOURCE / host_manifest, target / host_manifest)
-    for entry_name in SHARED_ENTRIES:
-        entry = SOURCE / entry_name
-        if entry.exists():
-            copy_path(entry, target / entry_name)
-
-
-def update_codex_marketplace(marketplace: Path, plugin_dir: Path) -> None:
-    print(f"Codex marketplace: {marketplace}")
-    entry_path = relative_source_path(marketplace.parent, plugin_dir)
-    payload = read_marketplace(marketplace)
-    plugins = payload.setdefault("plugins", [])
-    if not isinstance(plugins, list):
-        raise SystemExit(f"{marketplace} field 'plugins' must be an array.")
-
-    new_entry = {
-        "name": PLUGIN_NAME,
-        "source": {"source": "local", "path": entry_path},
-        "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
-        "category": DEFAULT_CATEGORY,
-    }
-    for index, existing in enumerate(plugins):
-        if isinstance(existing, dict) and existing.get("name") == PLUGIN_NAME:
-            plugins[index] = new_entry
-            break
-    else:
-        plugins.append(new_entry)
-    write_json(marketplace, payload)
 
 
 def register_hook(config_path: Path, command: str, status_message: str | None) -> None:
@@ -202,23 +188,6 @@ def read_json_object(path: Path) -> dict:
     if not isinstance(payload, dict):
         raise SystemExit(f"{path} must contain a JSON object.")
     return payload
-
-
-def read_marketplace(path: Path) -> dict:
-    payload = read_json_object(path)
-    payload.setdefault("name", DEFAULT_MARKETPLACE_NAME)
-    payload.setdefault("interface", {"displayName": DEFAULT_MARKETPLACE_DISPLAY_NAME})
-    return payload
-
-
-def relative_source_path(base: Path, target: Path) -> str:
-    try:
-        relative = os.path.relpath(target, base)
-    except ValueError:
-        return target.as_posix()
-    if relative.startswith(".."):
-        return target.as_posix()
-    return f"./{Path(relative).as_posix()}"
 
 
 def copy_path(source: Path, target: Path) -> None:
