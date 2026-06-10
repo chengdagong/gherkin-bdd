@@ -3,8 +3,8 @@
 
 Usage:
 
-    bdd-bootstrap claude    # copy-install for Claude Code + register its hook
-    bdd-bootstrap codex     # symlink-install for Codex + register its hook
+    bdd-bootstrap claude    # install for Claude Code + register its hook
+    bdd-bootstrap codex     # install for Codex + register its hook
 
 The plugin source is the repository that ships this script; the install target
 is the current working directory. Re-running is idempotent.
@@ -58,27 +58,29 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def install_claude(project_dir: Path) -> None:
     target = project_dir / ".claude" / "skills" / PLUGIN_NAME
-    print(f"Claude Code target: {target} (copy)")
-    install_tree(target=target, host_manifest=".claude-plugin", install_mode="copy")
+    print(f"Claude Code target: {target}")
+    install_tree(target=target, host_manifest=".claude-plugin")
 
+    bdd_ref = os.path.relpath(target / "BDD.md", project_dir)
     script = f".claude/skills/{PLUGIN_NAME}/{CHECK_SCRIPT_RELPATH}"
-    command = f'python3 "${{CLAUDE_PROJECT_DIR}}/{script}" --host claude'
+    command = f'python3 "${{CLAUDE_PROJECT_DIR}}/{script}" --host claude --bdd-ref "{bdd_ref}"'
     register_hook(project_dir / ".claude" / "settings.json", command, status_message=None)
-    run_bdd_sync(project_dir, target / CHECK_SCRIPT_RELPATH, "claude")
+    run_bdd_sync(project_dir, target / CHECK_SCRIPT_RELPATH, "claude", bdd_ref)
 
 
 def install_codex(project_dir: Path) -> None:
     plugin_dir = project_dir / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
-    print(f"Codex plugin target: {plugin_dir} (symlink)")
-    install_tree(target=plugin_dir, host_manifest=".codex-plugin", install_mode="symlink")
+    print(f"Codex plugin target: {plugin_dir}")
+    install_tree(target=plugin_dir, host_manifest=".codex-plugin")
     update_codex_marketplace(project_dir / ".agents" / "plugins" / "marketplace.json", plugin_dir)
 
-    command = f'python3 "{plugin_dir / CHECK_SCRIPT_RELPATH}" --host codex'
+    bdd_ref = os.path.relpath(plugin_dir / "BDD.md", project_dir)
+    command = f'python3 "{plugin_dir / CHECK_SCRIPT_RELPATH}" --host codex --bdd-ref "{bdd_ref}"'
     register_hook(project_dir / ".codex" / "hooks.json", command, status_message=SESSION_HOOK_STATUS)
-    run_bdd_sync(project_dir, plugin_dir / CHECK_SCRIPT_RELPATH, "codex")
+    run_bdd_sync(project_dir, plugin_dir / CHECK_SCRIPT_RELPATH, "codex", bdd_ref)
 
 
-def run_bdd_sync(project_dir: Path, script: Path, host: str) -> None:
+def run_bdd_sync(project_dir: Path, script: Path, host: str, bdd_ref: str) -> None:
     """Sync the BDD rule using the very same script the SessionStart hook runs.
 
     The installer feeds the script the same JSON payload a SessionStart hook
@@ -89,7 +91,7 @@ def run_bdd_sync(project_dir: Path, script: Path, host: str) -> None:
         {"cwd": str(project_dir), "hook_event_name": "SessionStart", "source": "startup"}
     )
     result = subprocess.run(
-        [sys.executable, str(script), "--host", host],
+        [sys.executable, str(script), "--host", host, "--bdd-ref", bdd_ref],
         input=payload,
         capture_output=True,
         text=True,
@@ -112,15 +114,15 @@ def read_system_message(stdout: str) -> str | None:
         return None
 
 
-def install_tree(*, target: Path, host_manifest: str, install_mode: str) -> None:
+def install_tree(*, target: Path, host_manifest: str) -> None:
     if target.exists() or target.is_symlink():
         remove_path(target)
     target.mkdir(parents=True, exist_ok=True)
-    link_or_copy(SOURCE / host_manifest, target / host_manifest, install_mode)
+    copy_path(SOURCE / host_manifest, target / host_manifest)
     for entry_name in SHARED_ENTRIES:
         entry = SOURCE / entry_name
         if entry.exists():
-            link_or_copy(entry, target / entry_name, install_mode)
+            copy_path(entry, target / entry_name)
 
 
 def update_codex_marketplace(marketplace: Path, plugin_dir: Path) -> None:
@@ -217,19 +219,6 @@ def relative_source_path(base: Path, target: Path) -> str:
     if relative.startswith(".."):
         return target.as_posix()
     return f"./{Path(relative).as_posix()}"
-
-
-def link_or_copy(source: Path, target: Path, install_mode: str) -> None:
-    if install_mode == "copy":
-        copy_path(source, target)
-        return
-    symlink(source, target)
-
-
-def symlink(source: Path, target: Path) -> None:
-    print(f"  symlink {target} -> {source}")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.symlink_to(source, target_is_directory=source.is_dir())
 
 
 def copy_path(source: Path, target: Path) -> None:

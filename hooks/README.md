@@ -16,9 +16,10 @@ the host's own config at install time, because Claude Code loads hooks from
 - Claude Code → merged into `<project>/.claude/settings.json`
 - Codex → merged into `<project>/.codex/hooks.json`
 
-Both entries call `scripts/check_bdd_sync.py --host <host>`. The script ensures
-the host's canonical instruction file carries the rule — `CLAUDE.md` for Claude,
-`AGENTS.md` for Codex — creating it if absent, syncing any other existing
-instruction file, and no-opping once the rule is present. The installer runs the
-same script once at install time, so install-time and session-time sync share one
-implementation. See `scripts/check_bdd_sync.py` and `features/bdd-sync-check.feature`.
+Both entries call `scripts/check_bdd_sync.py --host <host> --bdd-ref <path>`. The
+script keeps a reference to `BDD.md` in the host's canonical instruction file — an
+`@`-import in `CLAUDE.md` for Claude, an imperative "must read" directive in
+`AGENTS.md` for Codex — inside a managed region it owns and refreshes. The
+installer runs the same script once at install time, so install-time and
+session-time sync share one implementation. See `scripts/check_bdd_sync.py` and
+`features/bdd-sync-check.feature`.

@@ -53,21 +53,21 @@ The single positional argument (`claude` or `codex`) is required. The plugin sou
 
 Install targets:
 
-- Claude Code: `.claude/skills/gherkin-bdd` (copied) + a `SessionStart` hook in `.claude/settings.json`
-- Codex: `.agents/plugins/plugins/gherkin-bdd` (symlinked) + a marketplace entry in `.agents/plugins/marketplace.json` + a `SessionStart` hook in `.codex/hooks.json`
+- Claude Code: `.claude/skills/gherkin-bdd` + a `SessionStart` hook in `.claude/settings.json`
+- Codex: `.agents/plugins/plugins/gherkin-bdd` + a marketplace entry in `.agents/plugins/marketplace.json` + a `SessionStart` hook in `.codex/hooks.json`
 
-Claude Code files are copied, which makes the install self-contained and easy to commit with the project. Codex files are symbolic links back to this repository, so edits to shared files such as `skills/gherkin-bdd/SKILL.md` take effect without re-installing.
+Both installs are plain copies, so they are self-contained and easy to commit with the project. To pick up changes made in this repository (including `BDD.md`), re-run the installer in the project.
 
 `BDD.md` defines the project rule that every application feature should have a `.feature` file, and that Gherkin feature file is the source of truth for app behavior.
 
 ### BDD rule sync
 
-The plugin keeps the `BDD.md` rule present in the host's instruction file — `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex — both at install time and on every session start. A single script, `scripts/check_bdd_sync.py`, does this:
+`BDD.md` is the single source of truth for the rule. Instead of copying its text into your project, the plugin injects a short **reference** to it into the host's canonical instruction file — `CLAUDE.md` for Claude Code, `AGENTS.md` for Codex — inside a managed region marked by HTML comments. The reference is host-specific:
 
-- The installer runs it once (feeding it the same JSON payload a hook would), so the rule is in place immediately after install.
-- A `SessionStart` hook runs the **same** script on every session start/resume, so the rule stays in sync over time.
+- **Claude Code** expands `@path` imports, so the reference is `@<path-to-BDD.md>` and `BDD.md` is loaded into context automatically.
+- **Codex** does not expand imports, so the reference is an imperative directive requiring the agent to read `BDD.md`.
 
-The script creates the host's canonical instruction file if it is missing, appends the rule to any existing instruction file that lacks it, and does nothing once the rule is present (idempotent). It never blocks the session. Claude Code only loads hooks from `settings.json` (or a registered plugin), not from a copied skill directory, which is why the hook lives in `.claude/settings.json`.
+A single script, `scripts/check_bdd_sync.py`, owns this. The installer runs it once (feeding it the same JSON payload a hook would), and a `SessionStart` hook runs the **same** script on every session start/resume. It creates the canonical file if absent, refreshes the managed region, and does nothing once the reference is current (idempotent). It never blocks the session. Claude Code only loads hooks from `settings.json` (or a registered plugin), not from a copied skill directory, which is why the hook lives in `.claude/settings.json`.
 
 This CLI only supports project-level installation. It does not write to `~/.claude`, `~/.agents`, or any other user-level location.
 

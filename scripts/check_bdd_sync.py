@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""SessionStart hook: keep the BDD rule synced into project instructions.
+"""SessionStart hook: keep a reference to the BDD rule in project instructions.
 
 This script is shared by Claude Code and Codex. Both hosts invoke it as a
-SessionStart hook with a ``--host {claude|codex}`` argument baked in by the
-installer, and pass a JSON payload on stdin (with a ``cwd`` field).
+SessionStart hook with ``--host {claude|codex}`` and ``--bdd-ref <path>`` baked in
+by the installer, and pass a JSON payload on stdin (with a ``cwd`` field).
 
-The host determines the *canonical* instruction file — ``CLAUDE.md`` for Claude
-Code, ``AGENTS.md`` for Codex. The script guarantees the canonical file carries
-the rule (creating it if absent), keeps any other existing instruction file in
-sync, and never creates the other host's file. It edits files in place,
-idempotently, and never blocks the session.
+It does NOT inline ``BDD.md``; ``BDD.md`` stays the single source of truth. It
+keeps a short *reference* to it inside a managed region (marked by
+``<!-- gherkin-bdd:rule:start -->`` / ``<!-- gherkin-bdd:rule:end -->``) in the
+host's canonical instruction file — ``CLAUDE.md`` for Claude, ``AGENTS.md`` for
+Codex. The reference differs by host:
 
-``BDD.md`` is located relative to this script's install directory
-(``<install>/scripts/check_bdd_sync.py`` -> ``<install>/BDD.md``), so it works
-for both the copied Claude install and the symlinked Codex install.
+- Claude Code reads ``CLAUDE.md`` and expands ``@path`` imports into context, so
+  the reference is an ``@<bdd-ref>`` import that auto-loads ``BDD.md``.
+- Codex does not expand imports, so the reference is an imperative directive that
+  requires the agent to read ``BDD.md``.
+
+The script creates the canonical file if absent, refreshes the managed region when
+present, is idempotent, and never blocks the session.
 """
 
 from __future__ import annotations
@@ -26,34 +30,28 @@ from pathlib import Path
 
 INSTRUCTION_FILES = ("CLAUDE.md", "AGENTS.md")
 HOST_CANONICAL_FILE = {"claude": "CLAUDE.md", "codex": "AGENTS.md"}
-FALLBACK_INSTRUCTION_FILE = "CLAUDE.md"
+MARKER_START = "<!-- gherkin-bdd:rule:start -->"
+MARKER_END = "<!-- gherkin-bdd:rule:end -->"
 
 
 def main() -> int:
-    host = parse_host()
-    bdd_content = read_bdd_content()
-    if not bdd_content:
+    host, bdd_ref = parse_options()
+    if not host or not bdd_ref:
         return 0
 
     project_dir = resolve_project_dir(read_payload())
-    changed = sync_instructions(project_dir, bdd_content, host)
+    changed = sync_instructions(project_dir, host, bdd_ref)
     if changed:
         emit_notice(changed)
     return 0
 
 
-def parse_host() -> str | None:
+def parse_options() -> tuple[str | None, str | None]:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--host", choices=tuple(HOST_CANONICAL_FILE))
+    parser.add_argument("--bdd-ref")
     args, _ = parser.parse_known_args()
-    return args.host
-
-
-def read_bdd_content() -> str:
-    bdd_path = Path(__file__).resolve().parent.parent / "BDD.md"
-    if not bdd_path.exists():
-        return ""
-    return bdd_path.read_text(encoding="utf-8").strip()
+    return args.host, args.bdd_ref
 
 
 def read_payload() -> dict:
@@ -80,38 +78,28 @@ def resolve_project_dir(payload: dict) -> Path:
     return Path.cwd()
 
 
-def sync_instructions(project_dir: Path, bdd_content: str, host: str | None) -> list[str]:
-    """Keep the rule synced. Returns the names of changed files."""
+def sync_instructions(project_dir: Path, host: str, bdd_ref: str) -> list[str]:
+    """Keep the rule reference in the host's canonical file. Returns changed names."""
+    canonical = HOST_CANONICAL_FILE[host]
+    snippet = build_snippet(host, bdd_ref)
     existing = existing_instruction_files(project_dir)
-    canonical = HOST_CANONICAL_FILE.get(host) if host else None
-    changed: list[str] = []
+    match = next((p for p in existing if p.name.lower() == canonical.lower()), None)
+    target = match if match is not None else project_dir / canonical
+    if ensure_region(target, snippet):
+        return [target.name]
+    return []
 
-    # 1. Ensure the host's canonical file carries the rule.
-    if canonical:
-        match = next((p for p in existing if p.name.lower() == canonical.lower()), None)
-        if match is None:
-            path = project_dir / canonical
-            create_rule_file(path, bdd_content)
-            changed.append(path.name)
-        elif bdd_content not in read_text(match):
-            append_rule(match, bdd_content)
-            changed.append(match.name)
 
-    # 2. Keep every other existing instruction file in sync.
-    for path in existing:
-        if canonical and path.name.lower() == canonical.lower():
-            continue
-        if bdd_content not in read_text(path):
-            append_rule(path, bdd_content)
-            changed.append(path.name)
-
-    # 3. No host given and nothing exists: fall back to creating CLAUDE.md.
-    if not canonical and not existing:
-        path = project_dir / FALLBACK_INSTRUCTION_FILE
-        create_rule_file(path, bdd_content)
-        changed.append(path.name)
-
-    return changed
+def build_snippet(host: str, bdd_ref: str) -> str:
+    if host == "claude":
+        return f"## BDD rule\n\n@{bdd_ref}"
+    return (
+        "## BDD rule (required)\n\n"
+        f"Before adding or changing any user-facing functionality, you MUST read "
+        f"`{bdd_ref}` and follow it. Every feature must have a matching `.feature` "
+        "file, which is the source of truth for its behavior. Do not treat work as "
+        "complete until the behavior matches that file."
+    )
 
 
 def existing_instruction_files(project_dir: Path) -> list[Path]:
@@ -131,28 +119,41 @@ def read_text(path: Path) -> str:
         return ""
 
 
-def append_rule(path: Path, bdd_content: str) -> None:
-    existing = read_text(path)
-    separator = "\n\n" if existing.strip() else ""
-    path.write_text(existing.rstrip() + separator + bdd_content + "\n", encoding="utf-8")
-
-
-def create_rule_file(path: Path, bdd_content: str) -> None:
+def ensure_region(path: Path, snippet: str) -> bool:
+    """Create, append, or refresh the managed region. True if the file changed."""
+    original = read_text(path) if path.exists() else None
+    updated = upsert_region(original, snippet)
+    if original is not None and updated == original:
+        return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(bdd_content + "\n", encoding="utf-8")
+    path.write_text(updated, encoding="utf-8")
+    return True
+
+
+def upsert_region(original: str | None, snippet: str) -> str:
+    region = f"{MARKER_START}\n{snippet}\n{MARKER_END}"
+    if not original:
+        return region + "\n"
+    if MARKER_START in original and MARKER_END in original:
+        start = original.index(MARKER_START)
+        end = original.index(MARKER_END) + len(MARKER_END)
+        if start < end:
+            return original[:start] + region + original[end:]
+    separator = "\n\n" if original.strip() else ""
+    return original.rstrip() + separator + region + "\n"
 
 
 def emit_notice(changed: list[str]) -> None:
     names = ", ".join(changed)
     payload = {
         "continue": True,
-        "systemMessage": f"Synced the BDD rule into {names}.",
+        "systemMessage": f"Linked the BDD rule into {names}.",
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": (
-                f"The BDD rule from BDD.md was added to {names} to keep project "
-                "instructions in sync. Per the BDD rule, every user-facing feature "
-                "needs a matching .feature file as the source of truth for behavior."
+                f"{names} now references the BDD rule in BDD.md. Every user-facing "
+                "feature must have a matching .feature file as the source of truth "
+                "for its behavior."
             ),
         },
     }

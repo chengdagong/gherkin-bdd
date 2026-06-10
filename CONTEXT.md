@@ -21,5 +21,13 @@ The project-root file a host reads for standing agent instructions: `CLAUDE.md` 
 _Avoid_: "config file", "rules file", "prompt file".
 
 **Canonical instruction file**:
-The one instruction file a given host actually reads — `CLAUDE.md` for the `claude` host, `AGENTS.md` for the `codex` host. The BDD rule must be present here for that host to see it.
+The one instruction file a given host actually reads — `CLAUDE.md` for the `claude` host, `AGENTS.md` for the `codex` host. The BDD rule must be reachable from here for that host to see it.
 _Avoid_: "default instruction file".
+
+**Rule reference**:
+The pointer to `BDD.md` placed in a host's instruction file in place of the rule's full text. For Claude it is an `@`-import that auto-loads; for Codex it is a directive requiring the agent to read `BDD.md`.
+_Avoid_: "the rule copy", "inlined rule".
+
+**Managed region**:
+The block in an instruction file, delimited by `<!-- gherkin-bdd:rule:start -->` / `<!-- gherkin-bdd:rule:end -->` comments, that the plugin owns and refreshes. Content inside it is overwritten on sync; edits belong in `BDD.md`.
+_Avoid_: "the snippet", "the injected block".
