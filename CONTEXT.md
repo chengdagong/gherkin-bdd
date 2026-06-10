@@ -9,7 +9,7 @@ A unit of user-facing application behaviour. Every feature is specified in a Ghe
 _Avoid_: conflating it with the Gherkin `Feature:` keyword (that is syntax), or with a code module or implementation task.
 
 **BDD rule**:
-The project requirement that every feature has a matching `.feature` file, treated as the source of truth for its behaviour. Its canonical text is `BDD.md`.
+The project requirement that every feature has a matching `.feature` file, treated as the source of truth for its behaviour. Its canonical text is the tool's `BDD.md`, shipped with the skill and refreshed by re-installing; projects reference it and do not edit their installed copy.
 _Avoid_: "the convention", "the policy", "BDD requirements".
 
 **Host**:
@@ -41,5 +41,5 @@ A scenario declared in a `.feature` file whose test cannot be built yet. Tagged 
 _Avoid_: "pending scenario", "skipped scenario".
 
 **Managed region**:
-The block in an instruction file, delimited by `<!-- gherkin-bdd:rule:start -->` / `<!-- gherkin-bdd:rule:end -->` comments, that the plugin owns and refreshes. Content inside it is overwritten on sync; edits belong in `BDD.md`.
+The block in an instruction file, delimited by `<!-- gherkin-bdd:rule:start -->` / `<!-- gherkin-bdd:rule:end -->` comments, that the sync owns and refreshes. Content inside it is overwritten on sync; the rule text itself changes upstream in the gherkin-bdd tool, not in the project.
 _Avoid_: "the snippet", "the injected block".
