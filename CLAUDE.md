@@ -6,16 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A shared **Gherkin BDD skill + per-project installer** for Codex and Claude Code. The workflow is authored once in `skills/gherkin-bdd/SKILL.md`; `bin/bdd-bootstrap` copies it (with `BDD.md` and the sync script) into a target project's host-native skills directory and registers a SessionStart hook. There is **no plugin packaging** — both hosts discover project-level skills natively (decision in [docs/adr/0002-no-plugin-packaging.md](docs/adr/0002-no-plugin-packaging.md)).
 
-This is tool source, not an application. There is no build step and no third-party dependencies — everything is stdlib-only Python 3.
+This is tool source, not an application. There is no build step; the shipped code is stdlib-only Python 3, and the test suite (dev-only) uses pytest + pytest-bdd.
 
 ## Commands
 
 ```bash
-# Run the full test suite (11 tests, all stdlib unittest)
-python3 -m unittest discover -s tests
+# One-time test setup
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 
-# Run a single test
-python3 -m unittest tests.test_install_cli.InstallCliTest.test_claude_install_lays_skill_and_registers_hook
+# Run the executable Gherkin specs (features/*.feature via pytest-bdd)
+.venv/bin/pytest
+
+# Run a single scenario (-k matches the generated test name)
+.venv/bin/pytest -k stale_managed_region
 
 # Install into the CURRENT directory for one host (cd into the target project first)
 bin/bdd-bootstrap claude
@@ -33,6 +36,8 @@ bin/bdd-bootstrap codex
 The script takes `--host {claude|codex}` and `--bdd-ref <path>` (both baked into the hook command and the install-time call). It creates the canonical file if absent, refreshes the managed region, and is idempotent + non-blocking. Claude does **not** load hooks from a skill dir, so the hook must live in `settings.json`. Decision recorded in [docs/adr/0001-bdd-rule-sync.md](docs/adr/0001-bdd-rule-sync.md); behavior in [features/bdd-sync-check.feature](features/bdd-sync-check.feature).
 
 **Project-level only.** The CLI never writes to `~/.claude`, `~/.codex`, `~/.agents`, or any user-level location.
+
+**Testing: pytest-bdd (user-chosen per the BDD.md workflow).** The `.feature` files under `features/` are the executable specs; [tests/test_features.py](tests/test_features.py) binds them via `scenarios()` + step definitions. Scenarios tagged `@agent` are deselected (`pytest.ini` runs `-m "not agent"`) and verified agent-in-the-loop instead — every untagged scenario must have step bindings, and pytest-bdd fails on unbound steps, which enforces the scenario↔test trace.
 
 ## Working in the CLI
 

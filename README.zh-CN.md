@@ -56,8 +56,11 @@ bin/bdd-bootstrap codex    # Codex
 
 本仓库把自己的技能安装进了自己（dogfooding），但安装产物（`.claude/`）被 gitignore。因此 fresh clone 之后请先运行一次 `bin/bdd-bootstrap claude`；在此之前，`CLAUDE.md` 末尾的 `@`-import 处于悬空状态，BDD 规则不会自动载入。
 
-运行测试：
+`features/` 下的 `.feature` 文件就是可执行的测试套件（pytest-bdd）。安装并运行：
 
 ```bash
-python3 -m unittest discover -s tests
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest
 ```
+
+打了 `@agent` 标签的场景不参与自动化，改由 agent-in-the-loop 方式验证。

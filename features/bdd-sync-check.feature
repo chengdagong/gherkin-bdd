@@ -43,3 +43,9 @@ Feature: BDD rule sync
     When the skill is installed
     Then the host's canonical instruction file references BDD.md
     And a session-start hook is registered to run the same sync script later
+
+  Scenario: Re-running the installer refreshes in place
+    Given a project being set up with the gherkin-bdd installer for a host
+    When the skill is installed
+    And the skill is installed again
+    Then only one session-start hook entry and one managed region exist

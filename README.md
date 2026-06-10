@@ -56,8 +56,11 @@ In Claude Code, run `/gherkin-bdd` (or just describe Gherkin work — the skill 
 
 This repository dogfoods its own skill but gitignores the install artifacts (`.claude/`), so after a fresh clone run `bin/bdd-bootstrap claude` once. Until then the `@`-import at the end of `CLAUDE.md` dangles and the BDD rule is not auto-loaded.
 
-Run the tests:
+The `.feature` files under `features/` are the executable test suite (pytest-bdd). Set up and run:
 
 ```bash
-python3 -m unittest discover -s tests
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest
 ```
+
+Scenarios tagged `@agent` are excluded from automation and verified with an agent in the loop instead.

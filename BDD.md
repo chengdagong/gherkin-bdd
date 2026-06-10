@@ -18,9 +18,11 @@ When adding or changing functionality:
 Every feature implementation follows red-green order:
 
 1. Write or update the `.feature` file first.
-2. Build automated tests from its scenarios.
-3. Run the tests and confirm they all fail. A test that passes before the implementation exists does not verify the new behavior — rewrite it.
+2. Build automated tests from its scenarios, using the project's agreed test framework. If the project has not agreed on one, ask the user — offer concrete options (the language's standard test runner with one traceable test per scenario, or a Gherkin-native runner such as Cucumber, behave, or pytest-bdd) — and record the choice in the project instructions.
+3. Run the new tests and confirm they all fail. A test that passes before the implementation exists does not verify the new behavior — rewrite it.
 4. Write the implementation.
 5. Run the tests again, debugging and fixing until all of them pass.
 
 Do not start implementing before step 3, and do not mark work complete before step 5.
+
+Scenarios that can only be verified by observing agent behavior in a live session are exempt from automation: tag them `@agent` in the `.feature` file and verify them with an agent-in-the-loop check instead. Every untagged scenario must have at least one automated test that traces back to it.

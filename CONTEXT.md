@@ -32,6 +32,10 @@ _Avoid_: "the rule copy", "inlined rule".
 The skill that runs the installer from inside an agent session, targeting the host the session runs in unless the user names one.
 _Avoid_: conflating it with the installer CLI itself (`bin/bdd-bootstrap`).
 
+**Agent scenario**:
+A scenario verifiable only by observing agent behavior in a live session. Tagged `@agent` in the `.feature` file, exempt from automated tests, and verified agent-in-the-loop instead.
+_Avoid_: "manual scenario", "untestable scenario".
+
 **Managed region**:
 The block in an instruction file, delimited by `<!-- gherkin-bdd:rule:start -->` / `<!-- gherkin-bdd:rule:end -->` comments, that the plugin owns and refreshes. Content inside it is overwritten on sync; edits belong in `BDD.md`.
 _Avoid_: "the snippet", "the injected block".
