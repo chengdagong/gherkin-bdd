@@ -50,6 +50,9 @@ class InstallCliTest(unittest.TestCase):
             sorted(p.name for p in skill_dir.iterdir()),
             ["BDD.md", "SKILL.md", "scripts"],
         )
+        bootstrap_dir = skill_dir.parent / "bdd-bootstrap"
+        self.assertTrue((bootstrap_dir / "SKILL.md").exists())
+        self.assertEqual([p.name for p in bootstrap_dir.iterdir()], ["SKILL.md"])
 
     # --- install: claude ---------------------------------------------------
 

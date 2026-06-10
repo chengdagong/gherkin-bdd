@@ -7,6 +7,7 @@
 包含的内容：
 
 - `skills/gherkin-bdd/SKILL.md` —— Gherkin BDD 工作流（行为规格的起草、评审与实现）
+- `skills/bdd-bootstrap/SKILL.md` —— 一个技能：在会话内为当前所处的 host 运行安装器
 - `BDD.md` —— BDD 规则文本，唯一事实来源
 - `scripts/check_bdd_sync.py` —— 在各 host 的指令文件中维护对规则的引用
 - `bin/bdd-bootstrap` —— 项目级安装器
@@ -28,7 +29,7 @@ bin/bdd-bootstrap codex    # Codex
 
 |  | Claude Code | Codex |
 |---|---|---|
-| 技能（`SKILL.md` + `BDD.md` + 同步脚本） | `.claude/skills/gherkin-bdd/` | `.agents/skills/gherkin-bdd/` |
+| 技能（`gherkin-bdd`、`bdd-bootstrap`） | `.claude/skills/<name>/` | `.agents/skills/<name>/` |
 | `SessionStart` hook | `.claude/settings.json` | `.codex/hooks.json` |
 | 规则引用（受管区域） | `CLAUDE.md` | `AGENTS.md` |
 
@@ -48,6 +49,8 @@ bin/bdd-bootstrap codex    # Codex
 ## 使用技能
 
 在 Claude Code 中运行 `/gherkin-bdd`（或者直接描述 Gherkin 相关工作——技能描述会自动触发）。Codex 会自动列出项目技能，并在任务匹配时加载。重新安装后请重启会话（Claude Code 也可运行 `/reload-plugins`）。
+
+`/bdd-bootstrap` 在会话内重新运行当前项目的安装器：它会识别自己运行在 Claude Code 还是 Codex 中，并传入对应的 host 参数。也可以显式指定 host（如 `/bdd-bootstrap codex`）来为另一个 host 安装。
 
 ## 开发本仓库
 

@@ -7,6 +7,7 @@ A shared Gherkin BDD skill for Codex and Claude Code, plus a sync mechanism that
 What ships:
 
 - `skills/gherkin-bdd/SKILL.md` — the Gherkin BDD workflow (drafting, reviewing, and implementing behavior specs)
+- `skills/bdd-bootstrap/SKILL.md` — a skill that runs the installer for whichever host the session is running in
 - `BDD.md` — the BDD rule text, the single source of truth
 - `scripts/check_bdd_sync.py` — keeps a reference to the rule in each host's instruction file
 - `bin/bdd-bootstrap` — the per-project installer
@@ -28,7 +29,7 @@ What gets installed — and nothing else:
 
 |  | Claude Code | Codex |
 |---|---|---|
-| Skill (`SKILL.md` + `BDD.md` + sync script) | `.claude/skills/gherkin-bdd/` | `.agents/skills/gherkin-bdd/` |
+| Skills (`gherkin-bdd`, `bdd-bootstrap`) | `.claude/skills/<name>/` | `.agents/skills/<name>/` |
 | `SessionStart` hook | `.claude/settings.json` | `.codex/hooks.json` |
 | Rule reference (managed region) | `CLAUDE.md` | `AGENTS.md` |
 
@@ -45,9 +46,11 @@ The CLI only supports project-level installation. It does not write to `~/.claud
 
 A single script, `scripts/check_bdd_sync.py`, owns this. The installer runs it once (feeding it the same JSON payload a hook would), and a `SessionStart` hook runs the **same** script on every session start/resume. It creates the canonical file if absent, refreshes the managed region, and does nothing once the reference is current (idempotent). It never blocks the session. Claude Code only loads hooks from `settings.json`, not from a skill directory, which is why the hook lives in `.claude/settings.json`.
 
-## Using the skill
+## Using the skills
 
 In Claude Code, run `/gherkin-bdd` (or just describe Gherkin work — the skill description triggers it). Codex lists project skills automatically and loads the skill when a task matches. After re-installing, restart the session (Claude Code: or run `/reload-plugins`).
+
+`/bdd-bootstrap` re-runs the installer for the current project from inside a session: it detects whether it is running in Claude Code or Codex and passes the matching host argument. Name a host explicitly (`/bdd-bootstrap codex`) to install for the other host.
 
 ## Developing this repo
 

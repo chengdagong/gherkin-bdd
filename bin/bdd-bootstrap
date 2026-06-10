@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 SKILL_NAME = "gherkin-bdd"
+BOOTSTRAP_SKILL_NAME = "bdd-bootstrap"
 SESSION_HOOK_MATCHER = "startup|resume"
 SESSION_HOOK_MARKER = "check_bdd_sync.py"
 SESSION_HOOK_STATUS = "Syncing BDD rule"
@@ -57,9 +58,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def install(project_dir: Path, host: str) -> None:
     validate_source()
-    skill_dir = project_dir / HOST_SKILL_DIRS[host] / SKILL_NAME
+    skills_root = project_dir / HOST_SKILL_DIRS[host]
+    skill_dir = skills_root / SKILL_NAME
     print(f"Skill target: {skill_dir}")
     install_skill(skill_dir)
+    bootstrap_dir = skills_root / BOOTSTRAP_SKILL_NAME
+    print(f"Skill target: {bootstrap_dir}")
+    install_bootstrap_skill(bootstrap_dir)
 
     skill_ref = f"{HOST_SKILL_DIRS[host]}/{SKILL_NAME}"
     bdd_ref = f"{skill_ref}/BDD.md"
@@ -80,6 +85,7 @@ def install(project_dir: Path, host: str) -> None:
 def validate_source() -> None:
     required = (
         SOURCE / "skills" / SKILL_NAME / "SKILL.md",
+        SOURCE / "skills" / BOOTSTRAP_SKILL_NAME / "SKILL.md",
         SOURCE / "scripts" / "check_bdd_sync.py",
         SOURCE / "BDD.md",
     )
@@ -89,15 +95,24 @@ def validate_source() -> None:
 
 
 def install_skill(skill_dir: Path) -> None:
-    if skill_dir.exists() or skill_dir.is_symlink():
-        remove_path(skill_dir)
-    skill_dir.mkdir(parents=True, exist_ok=True)
+    reset_dir(skill_dir)
     copy_path(SOURCE / "skills" / SKILL_NAME / "SKILL.md", skill_dir / "SKILL.md")
     copy_path(SOURCE / "BDD.md", skill_dir / "BDD.md")
     copy_path(
         SOURCE / "scripts" / "check_bdd_sync.py",
         skill_dir / "scripts" / "check_bdd_sync.py",
     )
+
+
+def install_bootstrap_skill(skill_dir: Path) -> None:
+    reset_dir(skill_dir)
+    copy_path(SOURCE / "skills" / BOOTSTRAP_SKILL_NAME / "SKILL.md", skill_dir / "SKILL.md")
+
+
+def reset_dir(path: Path) -> None:
+    if path.exists() or path.is_symlink():
+        remove_path(path)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def run_bdd_sync(project_dir: Path, script: Path, host: str, bdd_ref: str) -> None:

@@ -28,6 +28,10 @@ _Avoid_: "default instruction file".
 The pointer to `BDD.md` placed in a host's instruction file in place of the rule's full text. For Claude it is an `@`-import that auto-loads; for Codex it is a directive requiring the agent to read `BDD.md`.
 _Avoid_: "the rule copy", "inlined rule".
 
+**Bootstrap skill**:
+The skill that runs the installer from inside an agent session, targeting the host the session runs in unless the user names one.
+_Avoid_: conflating it with the installer CLI itself (`bin/bdd-bootstrap`).
+
 **Managed region**:
 The block in an instruction file, delimited by `<!-- gherkin-bdd:rule:start -->` / `<!-- gherkin-bdd:rule:end -->` comments, that the plugin owns and refreshes. Content inside it is overwritten on sync; edits belong in `BDD.md`.
 _Avoid_: "the snippet", "the injected block".
